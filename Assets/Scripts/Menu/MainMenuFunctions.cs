@@ -265,6 +265,9 @@ public static class MainMenuFunctions
         CreateCampaignMenuButtons(mainMenu);
         CreateCampaignSubMenuButtons(mainMenu);
 
+        //This creates the Galaxy Mode buttons under Start Game (ship + galaxy map selection)
+        CreateGalaxyModeButtons(mainMenu);
+
         //This creates buttons for the model credit data
         CreateModelCreditButtons(mainMenu);
 
@@ -287,6 +290,8 @@ public static class MainMenuFunctions
 
         //Add your functions here
         mainMenu.functions.Add("ActivateSubMenu", new System.Action<string>(ActivateSubMenu));
+        mainMenu.functions.Add("SelectGalaxyShip", new System.Action<string>(GalaxyModeFunctions.SelectGalaxyShip));
+        mainMenu.functions.Add("StartGalaxyMode", new System.Action<string>(GalaxyModeFunctions.StartGalaxyMode));
         mainMenu.functions.Add("ChangeDefaultCameraPosition", new System.Action<string>(ChangeDefaultCameraPosition));
         mainMenu.functions.Add("ChangeResolution", new System.Action<string>(ChangeResolution));
         mainMenu.functions.Add("ChangeDamageLevel", new System.Action<string>(ChangeDamageLevel));
@@ -338,6 +343,9 @@ public static class MainMenuFunctions
 
         //This manually creates the blank start game menu
         subMenus.Add("Start Game");
+        subMenus.Add("Galaxy Mode");
+        subMenus.Add("Galaxy Ships");
+        subMenus.Add("Galaxy Map");
         subMenus.Add("Model Credits");
 
         //This creates a list of submenus from the campaign data
@@ -418,6 +426,9 @@ public static class MainMenuFunctions
 
             if ("Start Game_Settings" == subMenu.name)
             {
+                // Galaxy Mode entry at the top of Play / Start Game.
+                buttonDrop = CreateCampaignButton(mainMenu, subMenu, buttonDrop, "Galaxy Mode", "ContentButton02", "ActivateSubMenu", "Galaxy Mode", "Free-roam: pick a ship, pick a start planet", "");
+
                 int i = 0;
 
                 foreach (string campaign in mainMenu.missionData.campaigns)
@@ -428,6 +439,72 @@ public static class MainMenuFunctions
                 }
 
                 //This sets the size of the sub menu according to the how many buttons have been generated
+                RectTransform rt = subMenu.GetComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(0, buttonDrop);
+            }
+        }
+    }
+
+    //This creates the Galaxy Mode flow: Galaxy Mode intro -> Galaxy Ships (cockpit ships) -> Galaxy Map (start planets)
+    public static void CreateGalaxyModeButtons(MainMenu mainMenu)
+    {
+        foreach (GameObject subMenu in mainMenu.SubMenus)
+        {
+            if (subMenu.name == "Galaxy Mode_Settings")
+            {
+                float buttonDrop = 20;
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Galaxy Mode - Free Roam", "GameButton02", "ActivateSubMenu", "Pick a ship with cockpit, then pick a start planet on the galaxy map.", "Start Game");
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "1. Choose Ship", "ContentButton02", "ActivateSubMenu", "Ships with cockpit available for Galaxy Mode.", "Galaxy Ships");
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "2. Choose Start Planet", "ContentButton02", "ActivateSubMenu", "Galaxy map: curated start planets with region and faction.", "Galaxy Map");
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Back to Start Game", "ContentButton02", "ActivateSubMenu", "", "Start Game");
+
+                RectTransform rt = subMenu.GetComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(0, buttonDrop);
+            }
+
+            if (subMenu.name == "Galaxy Ships_Settings")
+            {
+                float buttonDrop = 20;
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Select Ship - then pick start planet", "GameButton02", "ActivateSubMenu", "Only small ships with a cockpit can be flown.", "Galaxy Mode");
+
+                List<ShipType> flyable = GalaxyModeFunctions.GetFlyableShips();
+
+                if (flyable.Count == 0)
+                {
+                    buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "No flyable ships found", "ContentButton03", "ActivateSubMenu", "No smallship with cockpitPrefab found in ShipTypes.json.", "Galaxy Mode");
+                }
+
+                foreach (ShipType ship in flyable)
+                {
+                    string label = ship.type;
+                    string desc = "Class: " + ship.shipClass + " Speed: " + ship.speedRating + " Cockpit: " + ship.cockpitPrefab;
+                    buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, label, "ContentButton02", "SelectGalaxyShip", desc, ship.type);
+                }
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Back to Galaxy Mode", "ContentButton02", "ActivateSubMenu", "", "Galaxy Mode");
+
+                RectTransform rt = subMenu.GetComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(0, buttonDrop);
+            }
+
+            if (subMenu.name == "Galaxy Map_Settings")
+            {
+                float buttonDrop = 20;
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Galaxy Map - Select Start Planet", "GameButton02", "ActivateSubMenu", "Ship: " + GalaxyModeFunctions.SelectedShipType + ". Pick where to start.", "Galaxy Ships");
+
+                List<StarSystem> systems = GalaxyModeFunctions.GetStartSystems();
+
+                foreach (StarSystem system in systems)
+                {
+                    string desc = system.Region + " / " + system.Sector + " - " + system.planetType + " - " + system.faction;
+                    buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, system.Planet, "ContentButton02", "StartGalaxyMode", desc, system.Planet);
+                }
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Back to Galaxy Mode", "ContentButton02", "ActivateSubMenu", "", "Galaxy Mode");
+
                 RectTransform rt = subMenu.GetComponent<RectTransform>();
                 rt.sizeDelta = new Vector2(0, buttonDrop);
             }
@@ -782,6 +859,24 @@ public static class MainMenuFunctions
     public static void ActivateParentMenu()
     {
         MainMenu mainMenu = GameObject.FindFirstObjectByType<MainMenu>();
+
+        if (mainMenu == null)
+        {
+            return;
+        }
+
+        // Custom Galaxy Mode hierarchy (code-created, not in Menu.json).
+        if (mainMenu.activeMenu == "Galaxy Ships" || mainMenu.activeMenu == "Galaxy Map")
+        {
+            ActivateSubMenu("Galaxy Mode");
+            return;
+        }
+
+        if (mainMenu.activeMenu == "Galaxy Mode")
+        {
+            ActivateSubMenu("Start Game");
+            return;
+        }
 
         //This loads all the information for the menu from the Json file
         TextAsset menuItemsFile = Resources.Load(OGGetAddress.files + "Menu") as TextAsset;

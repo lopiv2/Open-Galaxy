@@ -3,6 +3,7 @@
 public class Allegiance
 {
     public string allegiance;
+    public string displayName;
     public string enemy01;
     public string enemy02;
     public string enemy03;

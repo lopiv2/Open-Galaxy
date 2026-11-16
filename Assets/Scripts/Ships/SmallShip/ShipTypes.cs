@@ -5,6 +5,7 @@ using System.Collections;
 public class ShipType
 {
     public string type;
+    public string displayName;
     public string prefab;
     public string cockpitPrefab;
     public string callsign;

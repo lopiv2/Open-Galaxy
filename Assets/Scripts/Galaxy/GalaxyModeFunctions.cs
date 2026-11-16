@@ -137,7 +137,18 @@ public static class GalaxyModeFunctions
             SelectedShipType = shipType;
         }
 
-        MainMenuFunctions.OutputMenuMessage("Ship selected: " + SelectedShipType);
+        string label = SelectedShipType;
+
+        foreach (ShipType s in GetFlyableShips())
+        {
+            if (s != null && s.type == SelectedShipType)
+            {
+                label = GetShipDisplayName(s);
+                break;
+            }
+        }
+
+        MainMenuFunctions.OutputMenuMessage("Ship selected: " + label);
         MainMenuFunctions.ActivateSubMenu("Galaxy Map");
     }
 
@@ -240,6 +251,94 @@ public static class GalaxyModeFunctions
 
         HudFunctions.AddToMissionLog("Galaxy Mode: " + planetName + " - free roam");
         HudFunctions.AddToMissionLog("Press M to open the galaxy map and jump to another system.");
+    }
+
+    private static Dictionary<string, string> factionDisplayNames;
+
+    // Display helpers: prefer the explicit displayName from the JSON files,
+    // falling back to a formatted identifier so older entries still read well.
+    public static string GetShipDisplayName(ShipType shipType)
+    {
+        if (shipType == null)
+        {
+            return "Unknown";
+        }
+
+        if (!string.IsNullOrEmpty(shipType.displayName))
+        {
+            return shipType.displayName;
+        }
+
+        return FormatIdAsName(shipType.type);
+    }
+
+    public static string GetFactionDisplayName(string faction)
+    {
+        if (string.IsNullOrEmpty(faction))
+        {
+            return faction;
+        }
+
+        if (factionDisplayNames == null)
+        {
+            LoadFactionDisplayNames();
+        }
+
+        string displayName;
+
+        if (factionDisplayNames.TryGetValue(faction, out displayName) && !string.IsNullOrEmpty(displayName))
+        {
+            return displayName;
+        }
+
+        return FormatIdAsName(faction);
+    }
+
+    private static void LoadFactionDisplayNames()
+    {
+        factionDisplayNames = new Dictionary<string, string>();
+
+        TextAsset allegiancesFile = Resources.Load(OGGetAddress.files + "Allegiances") as TextAsset;
+
+        if (allegiancesFile == null)
+        {
+            return;
+        }
+
+        Allegiances allegiances = JsonUtility.FromJson<Allegiances>(allegiancesFile.text);
+
+        if (allegiances == null || allegiances.allegianceData == null)
+        {
+            return;
+        }
+
+        foreach (Allegiance allegiance in allegiances.allegianceData)
+        {
+            if (allegiance != null && !string.IsNullOrEmpty(allegiance.allegiance) && !factionDisplayNames.ContainsKey(allegiance.allegiance))
+            {
+                factionDisplayNames.Add(allegiance.allegiance, allegiance.displayName);
+            }
+        }
+    }
+
+    public static string FormatIdAsName(string id)
+    {
+        if (string.IsNullOrEmpty(id))
+        {
+            return id;
+        }
+
+        string[] parts = id.Replace('-', '_').Split('_');
+
+        for (int i = 0; i < parts.Length; i++)
+        {
+            if (parts[i].Length > 0)
+            {
+                parts[i] = char.ToUpper(parts[i][0]) + parts[i].Substring(1);
+            }
+        }
+
+        return string.Join(" ", parts);
     }
 
     private static string GetAllegianceForShip(string shipType)

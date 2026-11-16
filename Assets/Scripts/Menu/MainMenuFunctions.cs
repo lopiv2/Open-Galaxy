@@ -478,7 +478,7 @@ public static class MainMenuFunctions
 
                 foreach (ShipType ship in flyable)
                 {
-                    string label = ship.type;
+                    string label = GalaxyModeFunctions.GetShipDisplayName(ship);
                     string desc = "Class: " + ship.shipClass + " Speed: " + ship.speedRating + " Cockpit: " + ship.cockpitPrefab;
                     buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, label, "ContentButton02", "SelectGalaxyShip", desc, ship.type);
                 }
@@ -499,7 +499,7 @@ public static class MainMenuFunctions
 
                 foreach (StarSystem system in systems)
                 {
-                    string desc = system.Region + " / " + system.Sector + " - " + system.planetType + " - " + system.faction;
+                    string desc = system.Region + " / " + system.Sector + " - " + system.planetType + " - " + GalaxyModeFunctions.GetFactionDisplayName(system.faction);
                     buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, system.Planet, "ContentButton02", "StartGalaxyMode", desc, system.Planet);
                 }
 
@@ -1135,7 +1135,7 @@ public static class MainMenuFunctions
             settings.screenResX = 1220;
             settings.screenResY = 915;
         }
-        else if (resolution == "1680 × 1260 (4:3)")
+        else if (resolution == "1680 ï¿½ 1260 (4:3)")
         {
             Screen.SetResolution(1680, 1260, screenMode);
             settings.screenResX = 1680;
@@ -1189,7 +1189,7 @@ public static class MainMenuFunctions
             settings.screenResX = 1220;
             settings.screenResY = 620;
         }
-        else if (resolution == "1680 × 945 (16:9)")
+        else if (resolution == "1680 ï¿½ 945 (16:9)")
         {
             Screen.SetResolution(1680, 945, screenMode);
             settings.screenResX = 1680;
@@ -1243,7 +1243,7 @@ public static class MainMenuFunctions
             settings.screenResX = 1280;
             settings.screenResY = 800;
         }
-        else if (resolution == "1680 × 1050 (16:10)")
+        else if (resolution == "1680 ï¿½ 1050 (16:10)")
         {
             Screen.SetResolution(1680, 1050, screenMode);
             settings.screenResX = 1680;

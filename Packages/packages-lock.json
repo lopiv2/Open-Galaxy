@@ -55,7 +55,7 @@
       }
     },
     "com.unity.collab-proxy": {
-      "version": "2.14.0",
+      "version": "2.13.6",
       "depth": 0,
       "source": "registry",
       "dependencies": {},
@@ -268,7 +268,7 @@
       }
     },
     "com.unity.visualscripting": {
-      "version": "1.9.13",
+      "version": "1.9.12",
       "depth": 0,
       "source": "registry",
       "dependencies": {

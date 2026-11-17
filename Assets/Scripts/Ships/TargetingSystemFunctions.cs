@@ -748,6 +748,11 @@ public static class TargetingSystemFunctions
     {
         Scene scene = targetingSystem.ship.scene;
 
+        if (scene == null || scene.smallShips == null)
+        {
+            yield break;
+        }
+
         GameObject target = null;
         Ship targetShip = null;
 
@@ -809,6 +814,11 @@ public static class TargetingSystemFunctions
     public static IEnumerator GetClosestEnemyLargeShip_SmallShipAI(TargetingSystem targetingSystem)
     {
         Scene scene = targetingSystem.ship.scene;
+
+        if (scene == null || scene.largeShips == null)
+        {
+            yield break;
+        }
 
         GameObject target = null;
         LargeShip targetLargeShip = null;

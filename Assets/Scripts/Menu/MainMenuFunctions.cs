@@ -99,6 +99,8 @@ public static class MainMenuFunctions
     public static void RunMainMenuWithoutIntroduction()
     {
         //This sets the cursor settings
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
 

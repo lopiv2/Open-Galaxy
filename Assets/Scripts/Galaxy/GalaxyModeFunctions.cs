@@ -455,9 +455,18 @@ public static class GalaxyModeFunctions
             {
                 foreach (StarSystem system in starSystems.starSystemsData)
                 {
-                    if (system != null && system.Planet == planetName && !string.IsNullOrEmpty(system.planetType))
+                    if (system != null && system.Planet == planetName)
                     {
-                        planetType = system.planetType;
+                        if (!string.IsNullOrEmpty(system.planetPrefab))
+                        {
+                            return system.planetPrefab;
+                        }
+
+                        if (!string.IsNullOrEmpty(system.planetType))
+                        {
+                            planetType = system.planetType;
+                        }
+
                         break;
                     }
                 }

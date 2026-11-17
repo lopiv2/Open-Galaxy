@@ -29167,8 +29167,9 @@
             "seed": 8751,
             "SystemSunType": "normal",
             "planetType": "desert",
+            "planetPrefab": "tatooine",
             "faction": "independent",
-            "planetDistance": 60.0,
+            "planetDistance": 50.0,
             "suns": [
                 {
                     "sunType": "normal",

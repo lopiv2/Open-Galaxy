@@ -19,6 +19,9 @@ public class GalaxyMapController : MonoBehaviour
     private static GameObject toggleCanvasGO;
     private static GameObject countdownCanvasGO;
     private static Text countdownText;
+    private static string pendingDestination;
+    private static Text selectionText;
+    private static Button jumpButton;
     private float nextToggleTime;
 
     void Awake()
@@ -60,6 +63,10 @@ public class GalaxyMapController : MonoBehaviour
             countdownCanvasGO = null;
             countdownText = null;
         }
+
+        pendingDestination = null;
+        selectionText = null;
+        jumpButton = null;
     }
 
     void Update()
@@ -151,12 +158,15 @@ public class GalaxyMapController : MonoBehaviour
 
         EnsureEventSystem();
 
+        pendingDestination = null;
+
         if (mapCanvasGO == null)
         {
             mapCanvasGO = BuildMapCanvas();
         }
 
         RefreshMapButtons();
+        RefreshSelectionBar();
 
         mapCanvasGO.SetActive(true);
         IsMapOpen = true;
@@ -174,6 +184,7 @@ public class GalaxyMapController : MonoBehaviour
         }
 
         IsMapOpen = false;
+        pendingDestination = null;
 
         // Only restore flight state if we are still in a galaxy mission.
         MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
@@ -186,9 +197,40 @@ public class GalaxyMapController : MonoBehaviour
         }
     }
 
+    // Selecting a system only marks it as the pending destination.
+    public static void SelectDestination(string planetName)
+    {
+        if (IsTraveling || string.IsNullOrEmpty(planetName))
+        {
+            return;
+        }
+
+        Scene scene = SceneFunctions.GetScene();
+
+        if (scene == null || scene.currentLocation == planetName)
+        {
+            return;
+        }
+
+        pendingDestination = planetName;
+        RefreshMapButtons();
+        RefreshSelectionBar();
+    }
+
+    // The Cancel button closes the map without starting a hyperspace jump.
+    public static void CancelSelection()
+    {
+        HideMap();
+    }
+
     public static void TravelToSystem(string planetName)
     {
         if (IsTraveling == true || string.IsNullOrEmpty(planetName))
+        {
+            return;
+        }
+
+        if (planetName != pendingDestination)
         {
             return;
         }
@@ -205,6 +247,7 @@ public class GalaxyMapController : MonoBehaviour
             return;
         }
 
+        pendingDestination = null;
         HideMap();
 
         if (Instance != null)
@@ -570,7 +613,7 @@ public class GalaxyMapController : MonoBehaviour
         titleText.fontSize = 24;
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.color = Color.white;
-        titleText.text = "GALAXY MAP - click a system to hyperspace jump  (M to close)";
+        titleText.text = "GALAXY MAP - select a system, then confirm the jump  (M to close)";
 
         // Map area (buttons get positioned in here by galactic X/Y).
         GameObject mapAreaGO = new GameObject("MapArea");
@@ -578,7 +621,7 @@ public class GalaxyMapController : MonoBehaviour
         RectTransform mapRT = mapAreaGO.AddComponent<RectTransform>();
         mapRT.anchorMin = new Vector2(0f, 0f);
         mapRT.anchorMax = new Vector2(1f, 1f);
-        mapRT.offsetMin = new Vector2(20f, 80f);
+        mapRT.offsetMin = new Vector2(20f, 140f);
         mapRT.offsetMax = new Vector2(-20f, -60f);
         Image mapImage = mapAreaGO.AddComponent<Image>();
         mapImage.color = new Color(0.02f, 0.03f, 0.08f, 1f);
@@ -597,6 +640,67 @@ public class GalaxyMapController : MonoBehaviour
         footerText.alignment = TextAnchor.MiddleCenter;
         footerText.color = new Color(0.7f, 0.8f, 1f);
         footerText.text = "Green = current system. Travel uses hyperspace stretch effect.";
+
+        // Destination confirmation bar. Selecting a planet never starts travel
+        // until the player presses JUMP; Cancel returns to flight without jumping.
+        GameObject selectionBarGO = new GameObject("SelectionBar");
+        selectionBarGO.transform.SetParent(panelGO.transform, false);
+        RectTransform selectionBarRT = selectionBarGO.AddComponent<RectTransform>();
+        selectionBarRT.anchorMin = new Vector2(0f, 0f);
+        selectionBarRT.anchorMax = new Vector2(1f, 0f);
+        selectionBarRT.sizeDelta = new Vector2(0f, 48f);
+        selectionBarRT.anchoredPosition = new Vector2(0f, 85f);
+        Image selectionBarImage = selectionBarGO.AddComponent<Image>();
+        selectionBarImage.color = new Color(0.07f, 0.1f, 0.17f, 0.98f);
+
+        GameObject selectionTextGO = new GameObject("SelectedDestination");
+        selectionTextGO.transform.SetParent(selectionBarGO.transform, false);
+        RectTransform selectionTextRT = selectionTextGO.AddComponent<RectTransform>();
+        selectionTextRT.anchorMin = Vector2.zero;
+        selectionTextRT.anchorMax = Vector2.one;
+        selectionTextRT.offsetMin = new Vector2(20f, 0f);
+        selectionTextRT.offsetMax = new Vector2(-310f, 0f);
+        selectionText = selectionTextGO.AddComponent<Text>();
+        selectionText.font = font;
+        selectionText.fontSize = 16;
+        selectionText.alignment = TextAnchor.MiddleLeft;
+        selectionText.color = Color.white;
+        selectionText.text = "Select a destination system...";
+
+        GameObject jumpGO = new GameObject("JumpButton");
+        jumpGO.transform.SetParent(selectionBarGO.transform, false);
+        RectTransform jumpRT = jumpGO.AddComponent<RectTransform>();
+        jumpRT.anchorMin = new Vector2(1f, 0.5f);
+        jumpRT.anchorMax = new Vector2(1f, 0.5f);
+        jumpRT.sizeDelta = new Vector2(130f, 36f);
+        jumpRT.anchoredPosition = new Vector2(-220f, 0f);
+        jumpButton = jumpGO.AddComponent<Button>();
+        Image jumpImage = jumpGO.AddComponent<Image>();
+        jumpImage.color = new Color(0.12f, 0.45f, 0.2f, 1f);
+        SetButtonLabel(jumpGO, "JUMP", font);
+        jumpButton.interactable = false;
+        jumpButton.onClick.AddListener(() =>
+        {
+            if (!string.IsNullOrEmpty(pendingDestination))
+            {
+                TravelToSystem(pendingDestination);
+            }
+        });
+
+        GameObject cancelGO = new GameObject("CancelButton");
+        cancelGO.transform.SetParent(selectionBarGO.transform, false);
+        RectTransform cancelRT = cancelGO.AddComponent<RectTransform>();
+        cancelRT.anchorMin = new Vector2(1f, 0.5f);
+        cancelRT.anchorMax = new Vector2(1f, 0.5f);
+        cancelRT.sizeDelta = new Vector2(130f, 36f);
+        cancelRT.anchoredPosition = new Vector2(-75f, 0f);
+        Button cancelButton = cancelGO.AddComponent<Button>();
+        Image cancelImage = cancelGO.AddComponent<Image>();
+        cancelImage.color = new Color(0.45f, 0.15f, 0.12f, 1f);
+        SetButtonLabel(cancelGO, "CANCEL", font);
+        cancelButton.onClick.AddListener(() => CancelSelection());
+
+        RefreshSelectionBar();
 
         // Close button.
         GameObject closeGO = new GameObject("CloseButton");
@@ -630,11 +734,48 @@ public class GalaxyMapController : MonoBehaviour
         closeText.color = Color.white;
         closeText.text = "Close";
 
-        closeButton.onClick.AddListener(() => HideMap());
+        closeButton.onClick.AddListener(() => CancelSelection());
 
         canvasGO.SetActive(false);
 
         return canvasGO;
+    }
+
+    private static void SetButtonLabel(GameObject buttonGO, string labelText, Font font)
+    {
+        GameObject textGO = new GameObject("Text");
+        textGO.transform.SetParent(buttonGO.transform, false);
+        RectTransform textRT = textGO.AddComponent<RectTransform>();
+        textRT.anchorMin = Vector2.zero;
+        textRT.anchorMax = Vector2.one;
+        textRT.offsetMin = Vector2.zero;
+        textRT.offsetMax = Vector2.zero;
+
+        Text label = textGO.AddComponent<Text>();
+        label.font = font;
+        label.fontSize = 16;
+        label.alignment = TextAnchor.MiddleCenter;
+        label.color = Color.white;
+        label.text = labelText;
+    }
+
+    private static void RefreshSelectionBar()
+    {
+        if (selectionText == null || jumpButton == null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(pendingDestination))
+        {
+            selectionText.text = "Select a destination system...";
+            jumpButton.interactable = false;
+        }
+        else
+        {
+            selectionText.text = "Destination: " + pendingDestination + " — confirm to travel.";
+            jumpButton.interactable = true;
+        }
     }
 
     private static void RefreshMapButtons()
@@ -726,7 +867,21 @@ public class GalaxyMapController : MonoBehaviour
             Image img = btnGO.AddComponent<Image>();
 
             bool isCurrent = s.Planet == current;
-            img.color = isCurrent ? new Color(0.15f, 0.5f, 0.25f, 1f) : new Color(0.12f, 0.2f, 0.45f, 1f);
+            bool isSelected = s.Planet == pendingDestination;
+
+            if (isCurrent)
+            {
+                img.color = new Color(0.15f, 0.5f, 0.25f, 1f);
+            }
+            else if (isSelected)
+            {
+                img.color = new Color(0.55f, 0.42f, 0.12f, 1f);
+            }
+            else
+            {
+                img.color = new Color(0.12f, 0.2f, 0.45f, 1f);
+            }
+
             btn.interactable = !isCurrent;
 
             GameObject labelGO = new GameObject("Text");
@@ -744,7 +899,7 @@ public class GalaxyMapController : MonoBehaviour
             label.text = s.Planet;
 
             string dest = s.Planet;
-            btn.onClick.AddListener(() => TravelToSystem(dest));
+            btn.onClick.AddListener(() => SelectDestination(dest));
         }
     }
 }

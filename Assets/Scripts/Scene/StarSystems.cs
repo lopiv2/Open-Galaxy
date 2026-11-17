@@ -16,6 +16,7 @@ public class StarSystem
     public int seed;
     public string SystemSunType;
     public string planetType;
+    public string planetPrefab;
     public string faction;
     public float planetDistance;
     public List<StarSystemSun> suns;

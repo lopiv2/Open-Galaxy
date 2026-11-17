@@ -10,6 +10,10 @@ public static class GalaxyModeFunctions
 {
     public static string SelectedShipType = "xwing";
     public static string SelectedStartPlanet = "Tatooine";
+    public static string SelectedFaction = "rebel";
+    public static string SelectedLaserColor = "red";
+
+    public static readonly string[] LaserColors = new string[] { "red", "green", "yellow" };
 
     // Curated start planets - all exist in StarSystems.json with region/faction data.
     public static readonly string[] StartPlanets = new string[]
@@ -135,6 +139,7 @@ public static class GalaxyModeFunctions
         if (!string.IsNullOrEmpty(shipType))
         {
             SelectedShipType = shipType;
+            SelectedFaction = GetAllegianceForShip(SelectedShipType);
         }
 
         string label = SelectedShipType;
@@ -149,7 +154,70 @@ public static class GalaxyModeFunctions
         }
 
         MainMenuFunctions.OutputMenuMessage("Ship selected: " + label);
+        MainMenuFunctions.ActivateSubMenu("Galaxy Faction");
+    }
+
+    // Called from the Galaxy Faction submenu.
+    public static void SelectGalaxyFaction(string faction)
+    {
+        if (!string.IsNullOrEmpty(faction))
+        {
+            SelectedFaction = faction;
+        }
+
+        MainMenuFunctions.OutputMenuMessage("Faction selected: " + GetFactionDisplayName(SelectedFaction));
+        MainMenuFunctions.ActivateSubMenu("Galaxy Laser");
+    }
+
+    // Called from the Galaxy Laser submenu.
+    public static void SelectGalaxyLaser(string laserColor)
+    {
+        if (!string.IsNullOrEmpty(laserColor))
+        {
+            SelectedLaserColor = laserColor.ToLower();
+        }
+
+        MainMenuFunctions.OutputMenuMessage("Laser color selected: " + SelectedLaserColor);
         MainMenuFunctions.ActivateSubMenu("Galaxy Map");
+    }
+
+    // Playable factions for the Galaxy Mode faction picker.
+    public static List<Allegiance> GetPlayableFactions()
+    {
+        List<Allegiance> result = new List<Allegiance>();
+
+        TextAsset allegiancesFile = Resources.Load(OGGetAddress.files + "Allegiances") as TextAsset;
+
+        if (allegiancesFile == null)
+        {
+            return result;
+        }
+
+        Allegiances allegiances = JsonUtility.FromJson<Allegiances>(allegiancesFile.text);
+
+        if (allegiances == null || allegiances.allegianceData == null)
+        {
+            return result;
+        }
+
+        foreach (Allegiance allegiance in allegiances.allegianceData)
+        {
+            if (allegiance == null || string.IsNullOrEmpty(allegiance.allegiance))
+            {
+                continue;
+            }
+
+            if (allegiance.allegiance == "none" || allegiance.allegiance == "hostile" || allegiance.allegiance == "independent")
+            {
+                continue;
+            }
+
+            result.Add(allegiance);
+        }
+
+        result.Sort((a, b) => string.Compare(GetFactionDisplayName(a.allegiance), GetFactionDisplayName(b.allegiance)));
+
+        return result;
     }
 
     // Called from the Galaxy Map submenu. Launches free-roam.
@@ -219,18 +287,22 @@ public static class GalaxyModeFunctions
 
         // Planet for the selected start system.
         string planetPrefab = GetPlanetPrefabForSystem(planetName);
-        SceneFunctions.GeneratePlanet(planetPrefab, "none", true, 150, 0, 0, 0, 0, 0, 0);
+        SceneFunctions.GeneratePlanet(planetPrefab, "none", true, GetPlanetDistanceForSystem(planetName), 0, 0, 0, 0, 0, 0);
         MainMenuFunctions.AddLogToLoadingScreen("Planet " + planetName + " (" + planetPrefab + ") loaded.", startTime);
 
-        // Player ship.
-        string allegiance = GetAllegianceForShip(shipType);
+        // Suns declared in StarSystems.json (e.g. Tatooine's binary suns).
+        GalaxySunFunctions.SpawnSunsForSystem(planetName);
+
+        // Player ship (faction and laser color chosen in the Galaxy Mode flow).
+        string allegiance = string.IsNullOrEmpty(SelectedFaction) ? GetAllegianceForShip(shipType) : SelectedFaction;
+        string playerLaser = string.IsNullOrEmpty(SelectedLaserColor) ? "red" : SelectedLaserColor;
         Vector3 playerPos = new Vector3(0, 0, -200);
         Quaternion playerRot = Quaternion.identity;
-        SceneFunctions.LoadSingleShip(playerPos, playerRot, shipType, "player01", allegiance, "no cargo", false, false, false, "red", true);
+        SceneFunctions.LoadSingleShip(playerPos, playerRot, shipType, "player01", allegiance, "no cargo", false, false, false, playerLaser, true);
         MainMenuFunctions.AddLogToLoadingScreen("Player ship " + shipType + " loaded.", startTime);
 
         // A couple of ambient ships so the scene is not empty.
-        SceneFunctions.LoadSingleShip(new Vector3(500, 100, 500), Quaternion.Euler(0, 180, 0), shipType, "escort01", allegiance, "no cargo", false, true, false, "red", true);
+        SceneFunctions.LoadSingleShip(new Vector3(500, 100, 500), Quaternion.Euler(0, 180, 0), shipType, "escort01", allegiance, "no cargo", false, true, false, playerLaser, true);
         SceneFunctions.LoadSingleShip(new Vector3(-600, -50, 800), Quaternion.Euler(0, 180, 0), "tiefighter", "hostile01", "hostile", "no cargo", false, true, false, "red", true);
 
         yield return null;
@@ -393,6 +465,31 @@ public static class GalaxyModeFunctions
         }
 
         return MapPlanetTypeToPrefab(planetType);
+    }
+
+    // Optional per-system planet distance (StarSystems.json "planetDistance").
+    // Falls back to the historical default so other systems render unchanged.
+    public static float GetPlanetDistanceForSystem(string planetName)
+    {
+        TextAsset starSystemFile = Resources.Load(OGGetAddress.files + "StarSystems") as TextAsset;
+
+        if (starSystemFile != null)
+        {
+            StarSystems starSystems = JsonUtility.FromJson<StarSystems>(starSystemFile.text);
+
+            if (starSystems != null && starSystems.starSystemsData != null)
+            {
+                foreach (StarSystem system in starSystems.starSystemsData)
+                {
+                    if (system != null && system.Planet == planetName && system.planetDistance > 0f)
+                    {
+                        return system.planetDistance;
+                    }
+                }
+            }
+        }
+
+        return 150f;
     }
 
     private static string MapPlanetTypeToPrefab(string planetType)

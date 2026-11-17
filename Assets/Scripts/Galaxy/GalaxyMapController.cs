@@ -52,6 +52,8 @@ public class GalaxyMapController : MonoBehaviour
             toggleCanvasGO = null;
         }
 
+        GalaxySunFunctions.ClearSuns();
+
         if (countdownCanvasGO != null)
         {
             GameObject.Destroy(countdownCanvasGO);
@@ -284,6 +286,7 @@ public class GalaxyMapController : MonoBehaviour
         }
 
         // Match mission jumps: clear the old location, stretch stars and show the tunnel.
+        GalaxySunFunctions.ClearSuns();
         SceneFunctions.ClearLocation();
         mainShip.transform.localPosition = new Vector3(0, 0, -200);
 
@@ -309,7 +312,8 @@ public class GalaxyMapController : MonoBehaviour
         }
 
         string planetPrefab = GalaxyModeFunctions.GetPlanetPrefabForSystemPublic(destination);
-        SceneFunctions.GeneratePlanet(planetPrefab, "none", true, 150, 0, 0, 0, 0, 0, 0);
+        SceneFunctions.GeneratePlanet(planetPrefab, "none", true, GalaxyModeFunctions.GetPlanetDistanceForSystem(destination), 0, 0, 0, 0, 0, 0);
+        GalaxySunFunctions.SpawnSunsForSystem(destination);
         scene.currentLocation = destination;
         scene.availibleLocations = new List<string> { destination };
 

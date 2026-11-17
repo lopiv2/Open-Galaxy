@@ -291,6 +291,8 @@ public static class MainMenuFunctions
         //Add your functions here
         mainMenu.functions.Add("ActivateSubMenu", new System.Action<string>(ActivateSubMenu));
         mainMenu.functions.Add("SelectGalaxyShip", new System.Action<string>(GalaxyModeFunctions.SelectGalaxyShip));
+        mainMenu.functions.Add("SelectGalaxyFaction", new System.Action<string>(GalaxyModeFunctions.SelectGalaxyFaction));
+        mainMenu.functions.Add("SelectGalaxyLaser", new System.Action<string>(GalaxyModeFunctions.SelectGalaxyLaser));
         mainMenu.functions.Add("StartGalaxyMode", new System.Action<string>(GalaxyModeFunctions.StartGalaxyMode));
         mainMenu.functions.Add("ChangeDefaultCameraPosition", new System.Action<string>(ChangeDefaultCameraPosition));
         mainMenu.functions.Add("ChangeResolution", new System.Action<string>(ChangeResolution));
@@ -345,6 +347,8 @@ public static class MainMenuFunctions
         subMenus.Add("Start Game");
         subMenus.Add("Galaxy Mode");
         subMenus.Add("Galaxy Ships");
+        subMenus.Add("Galaxy Faction");
+        subMenus.Add("Galaxy Laser");
         subMenus.Add("Galaxy Map");
         subMenus.Add("Model Credits");
 
@@ -456,7 +460,8 @@ public static class MainMenuFunctions
 
                 buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Galaxy Mode - Free Roam", "GameButton02", "ActivateSubMenu", "Pick a ship with cockpit, then pick a start planet on the galaxy map.", "Start Game");
                 buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "1. Choose Ship", "ContentButton02", "ActivateSubMenu", "Ships with cockpit available for Galaxy Mode.", "Galaxy Ships");
-                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "2. Choose Start Planet", "ContentButton02", "ActivateSubMenu", "Galaxy map: curated start planets with region and faction.", "Galaxy Map");
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "2. Choose Faction & Laser", "ContentButton02", "ActivateSubMenu", "Pick your allegiance and laser color.", "Galaxy Faction");
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "3. Choose Start Planet", "ContentButton02", "ActivateSubMenu", "Galaxy map: curated start planets with region and faction.", "Galaxy Map");
                 buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Back to Start Game", "ContentButton02", "ActivateSubMenu", "", "Start Game");
 
                 RectTransform rt = subMenu.GetComponent<RectTransform>();
@@ -489,11 +494,49 @@ public static class MainMenuFunctions
                 rt.sizeDelta = new Vector2(0, buttonDrop);
             }
 
+            if (subMenu.name == "Galaxy Faction_Settings")
+            {
+                float buttonDrop = 20;
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Select Faction - then pick laser color", "GameButton02", "ActivateSubMenu", "Your allegiance in Galaxy Mode.", "Galaxy Ships");
+
+                List<Allegiance> factions = GalaxyModeFunctions.GetPlayableFactions();
+
+                foreach (Allegiance faction in factions)
+                {
+                    string label = GalaxyModeFunctions.GetFactionDisplayName(faction.allegiance);
+                    buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, label, "ContentButton02", "SelectGalaxyFaction", "Allegiance: " + faction.allegiance, faction.allegiance);
+                }
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Back to Galaxy Mode", "ContentButton02", "ActivateSubMenu", "", "Galaxy Mode");
+
+                RectTransform rt = subMenu.GetComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(0, buttonDrop);
+            }
+
+            if (subMenu.name == "Galaxy Laser_Settings")
+            {
+                float buttonDrop = 20;
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Select Laser Color - then pick start planet", "GameButton02", "ActivateSubMenu", "Faction: " + GalaxyModeFunctions.GetFactionDisplayName(GalaxyModeFunctions.SelectedFaction) + ".", "Galaxy Faction");
+
+                foreach (string laserColor in GalaxyModeFunctions.LaserColors)
+                {
+                    string label = GalaxyModeFunctions.FormatIdAsName(laserColor) + " Lasers";
+                    buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, label, "ContentButton02", "SelectGalaxyLaser", "Laser color: " + laserColor, laserColor);
+                }
+
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Back to Galaxy Mode", "ContentButton02", "ActivateSubMenu", "", "Galaxy Mode");
+
+                RectTransform rt = subMenu.GetComponent<RectTransform>();
+                rt.sizeDelta = new Vector2(0, buttonDrop);
+            }
+
             if (subMenu.name == "Galaxy Map_Settings")
             {
                 float buttonDrop = 20;
 
-                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Galaxy Map - Select Start Planet", "GameButton02", "ActivateSubMenu", "Ship: " + GalaxyModeFunctions.SelectedShipType + ". Pick where to start.", "Galaxy Ships");
+                buttonDrop = CreateSubMenuButton(mainMenu, subMenu, buttonDrop, "Galaxy Map - Select Start Planet", "GameButton02", "ActivateSubMenu", "Ship: " + GalaxyModeFunctions.SelectedShipType + ". Pick where to start.", "Galaxy Laser");
 
                 List<StarSystem> systems = GalaxyModeFunctions.GetStartSystems();
 
@@ -866,7 +909,25 @@ public static class MainMenuFunctions
         }
 
         // Custom Galaxy Mode hierarchy (code-created, not in Menu.json).
-        if (mainMenu.activeMenu == "Galaxy Ships" || mainMenu.activeMenu == "Galaxy Map")
+        if (mainMenu.activeMenu == "Galaxy Map")
+        {
+            ActivateSubMenu("Galaxy Laser");
+            return;
+        }
+
+        if (mainMenu.activeMenu == "Galaxy Laser")
+        {
+            ActivateSubMenu("Galaxy Faction");
+            return;
+        }
+
+        if (mainMenu.activeMenu == "Galaxy Faction")
+        {
+            ActivateSubMenu("Galaxy Ships");
+            return;
+        }
+
+        if (mainMenu.activeMenu == "Galaxy Ships")
         {
             ActivateSubMenu("Galaxy Mode");
             return;

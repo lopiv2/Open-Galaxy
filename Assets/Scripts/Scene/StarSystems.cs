@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 
 [System.Serializable]
 public class StarSystem
@@ -16,6 +17,17 @@ public class StarSystem
     public string SystemSunType;
     public string planetType;
     public string faction;
+    public float planetDistance;
+    public List<StarSystemSun> suns;
+}
+
+[System.Serializable]
+public class StarSystemSun
+{
+    public string sunType;
+    public float angle;
+    public float distance;
+    public float scale;
 }
 
 [System.Serializable]

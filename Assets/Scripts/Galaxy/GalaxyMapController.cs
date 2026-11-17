@@ -19,9 +19,17 @@ public class GalaxyMapController : MonoBehaviour
     private static GameObject toggleCanvasGO;
     private static GameObject countdownCanvasGO;
     private static Text countdownText;
+    private static GameObject map3DViewGO;
+    private static GalaxyMap3DView map3DView;
+    private static RawImage map3DOutput;
     private static string pendingDestination;
     private static Text selectionText;
     private static Button jumpButton;
+
+    // Map layers (Layers dialog).
+    private static bool showGridLayer = true;
+    private static bool showNamesLayer = true;
+
     private float nextToggleTime;
 
     void Awake()
@@ -62,6 +70,14 @@ public class GalaxyMapController : MonoBehaviour
             GameObject.Destroy(countdownCanvasGO);
             countdownCanvasGO = null;
             countdownText = null;
+        }
+
+        if (map3DViewGO != null)
+        {
+            GameObject.Destroy(map3DViewGO);
+            map3DViewGO = null;
+            map3DView = null;
+            map3DOutput = null;
         }
 
         pendingDestination = null;
@@ -165,10 +181,20 @@ public class GalaxyMapController : MonoBehaviour
             mapCanvasGO = BuildMapCanvas();
         }
 
+        // Measure the real rect after activation so dots and grid fit the window.
+        mapCanvasGO.SetActive(true);
+        Canvas.ForceUpdateCanvases();
+
+        if (map3DView != null)
+        {
+            map3DView.SetVisible(true);
+        }
+
         RefreshMapButtons();
+        RefreshLayers();
+        RefreshLayersDialog();
         RefreshSelectionBar();
 
-        mapCanvasGO.SetActive(true);
         IsMapOpen = true;
 
         Time.timeScale = 0;
@@ -180,7 +206,24 @@ public class GalaxyMapController : MonoBehaviour
     {
         if (mapCanvasGO != null)
         {
+            Transform panel = mapCanvasGO.transform.Find("MapPanel");
+
+            if (panel != null)
+            {
+                Transform dialog = panel.Find("LayersDialog");
+
+                if (dialog != null)
+                {
+                    dialog.gameObject.SetActive(false);
+                }
+            }
+
             mapCanvasGO.SetActive(false);
+        }
+
+        if (map3DView != null)
+        {
+            map3DView.SetVisible(false);
         }
 
         IsMapOpen = false;
@@ -213,7 +256,16 @@ public class GalaxyMapController : MonoBehaviour
         }
 
         pendingDestination = planetName;
-        RefreshMapButtons();
+
+        if (map3DView != null)
+        {
+            map3DView.SetSelection(scene != null ? scene.currentLocation : "", pendingDestination);
+        }
+        else
+        {
+            RefreshMapButtons();
+        }
+
         RefreshSelectionBar();
     }
 
@@ -589,13 +641,14 @@ public class GalaxyMapController : MonoBehaviour
         Image bgImage = bgGO.AddComponent<Image>();
         bgImage.color = new Color(0f, 0f, 0f, 0.7f);
 
-        // Main panel.
+        // Main panel: stretch to the window so header and buttons are never cut off.
         GameObject panelGO = new GameObject("MapPanel");
         panelGO.transform.SetParent(canvasGO.transform, false);
         RectTransform panelRT = panelGO.AddComponent<RectTransform>();
-        panelRT.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRT.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRT.sizeDelta = new Vector2(1100f, 750f);
+        panelRT.anchorMin = new Vector2(0.03f, 0.04f);
+        panelRT.anchorMax = new Vector2(0.97f, 0.96f);
+        panelRT.offsetMin = Vector2.zero;
+        panelRT.offsetMax = Vector2.zero;
         panelRT.anchoredPosition = Vector2.zero;
         Image panelImage = panelGO.AddComponent<Image>();
         panelImage.color = new Color(0.04f, 0.05f, 0.1f, 0.97f);
@@ -625,6 +678,32 @@ public class GalaxyMapController : MonoBehaviour
         mapRT.offsetMax = new Vector2(-20f, -60f);
         Image mapImage = mapAreaGO.AddComponent<Image>();
         mapImage.color = new Color(0.02f, 0.03f, 0.08f, 1f);
+        mapImage.preserveAspect = false;
+        mapAreaGO.AddComponent<Mask>();
+
+        // Galaxy chart backdrop (SW-Galaxy_back.jpg in Resources).
+        Texture2D galaxyBackdrop = Resources.Load<Texture2D>(OGGetAddress.menus + "galaxy_map/SW-Galaxy_back");
+
+        if (galaxyBackdrop != null)
+        {
+            mapImage.sprite = Sprite.Create(galaxyBackdrop, new Rect(0f, 0f, galaxyBackdrop.width, galaxyBackdrop.height), new Vector2(0.5f, 0.5f), 100f);
+            mapImage.color = Color.white;
+        }
+
+        GameObject map3DOutputGO = new GameObject("GalaxyMap3DOutput");
+        map3DOutputGO.transform.SetParent(mapAreaGO.transform, false);
+        RectTransform map3DOutputRT = map3DOutputGO.AddComponent<RectTransform>();
+        map3DOutputRT.anchorMin = Vector2.zero;
+        map3DOutputRT.anchorMax = Vector2.one;
+        map3DOutputRT.offsetMin = Vector2.zero;
+        map3DOutputRT.offsetMax = Vector2.zero;
+        map3DOutput = map3DOutputGO.AddComponent<RawImage>();
+        map3DOutput.color = Color.white;
+        map3DOutput.raycastTarget = false;
+
+        map3DViewGO = new GameObject("GalaxyMap3DView");
+        map3DView = map3DViewGO.AddComponent<GalaxyMap3DView>();
+        map3DView.Initialize(mapRT, map3DOutput, font);
 
         // Footer info.
         GameObject footerGO = new GameObject("Footer");
@@ -736,9 +815,129 @@ public class GalaxyMapController : MonoBehaviour
 
         closeButton.onClick.AddListener(() => CancelSelection());
 
+        // Layers button (top-left) and layers dialog.
+        GameObject layersGO = new GameObject("LayersButton");
+        layersGO.transform.SetParent(panelGO.transform, false);
+        RectTransform layersRT = layersGO.AddComponent<RectTransform>();
+        layersRT.anchorMin = new Vector2(0f, 1f);
+        layersRT.anchorMax = new Vector2(0f, 1f);
+        layersRT.sizeDelta = new Vector2(110f, 36f);
+        layersRT.anchoredPosition = new Vector2(75f, -25f);
+        Button layersButton = layersGO.AddComponent<Button>();
+        Image layersImage = layersGO.AddComponent<Image>();
+        layersImage.color = new Color(0.12f, 0.2f, 0.45f, 1f);
+        GameObject layersTextGO = new GameObject("Text");
+        layersTextGO.transform.SetParent(layersGO.transform, false);
+        RectTransform layersTextRT = layersTextGO.AddComponent<RectTransform>();
+        layersTextRT.anchorMin = Vector2.zero;
+        layersTextRT.anchorMax = Vector2.one;
+        layersTextRT.offsetMin = Vector2.zero;
+        layersTextRT.offsetMax = Vector2.zero;
+        Text layersText = layersTextGO.AddComponent<Text>();
+        layersText.font = font;
+        layersText.fontSize = 14;
+        layersText.alignment = TextAnchor.MiddleCenter;
+        layersText.color = Color.white;
+        layersText.text = "Layers";
+        layersButton.onClick.AddListener(() => ToggleLayersDialog());
+
+        GameObject dialogGO = new GameObject("LayersDialog");
+        dialogGO.transform.SetParent(panelGO.transform, false);
+        RectTransform dialogRT = dialogGO.AddComponent<RectTransform>();
+        dialogRT.anchorMin = new Vector2(0.5f, 0.5f);
+        dialogRT.anchorMax = new Vector2(0.5f, 0.5f);
+        dialogRT.sizeDelta = new Vector2(380f, 260f);
+        dialogRT.anchoredPosition = Vector2.zero;
+        Image dialogImage = dialogGO.AddComponent<Image>();
+        dialogImage.color = new Color(0.03f, 0.04f, 0.09f, 0.98f);
+
+        GameObject dialogTitleGO = new GameObject("Title");
+        dialogTitleGO.transform.SetParent(dialogGO.transform, false);
+        RectTransform dialogTitleRT = dialogTitleGO.AddComponent<RectTransform>();
+        dialogTitleRT.anchorMin = new Vector2(0f, 1f);
+        dialogTitleRT.anchorMax = new Vector2(1f, 1f);
+        dialogTitleRT.sizeDelta = new Vector2(0f, 40f);
+        dialogTitleRT.anchoredPosition = new Vector2(0f, -20f);
+        Text dialogTitle = dialogTitleGO.AddComponent<Text>();
+        dialogTitle.font = font;
+        dialogTitle.fontSize = 18;
+        dialogTitle.alignment = TextAnchor.MiddleCenter;
+        dialogTitle.color = Color.white;
+        dialogTitle.text = "Map Layers";
+
+        BuildLayerRow(dialogGO, font, "Row_Grid", 0, "Grid C-U / 1-21: ON", () => SetGridLayer(!showGridLayer));
+        BuildLayerRow(dialogGO, font, "Row_Names", 1, "System names: ON", () => SetNamesLayer(!showNamesLayer));
+
+        GameObject dialogCloseGO = new GameObject("CloseButton");
+        dialogCloseGO.transform.SetParent(dialogGO.transform, false);
+        RectTransform dialogCloseRT = dialogCloseGO.AddComponent<RectTransform>();
+        dialogCloseRT.anchorMin = new Vector2(0.5f, 0f);
+        dialogCloseRT.anchorMax = new Vector2(0.5f, 0f);
+        dialogCloseRT.sizeDelta = new Vector2(120f, 32f);
+        dialogCloseRT.anchoredPosition = new Vector2(0f, 30f);
+        Button dialogCloseButton = dialogCloseGO.AddComponent<Button>();
+        Image dialogCloseImage = dialogCloseGO.AddComponent<Image>();
+        dialogCloseImage.color = new Color(0.3f, 0.1f, 0.1f, 1f);
+        GameObject dialogCloseTextGO = new GameObject("Text");
+        dialogCloseTextGO.transform.SetParent(dialogCloseGO.transform, false);
+        RectTransform dialogCloseTextRT = dialogCloseTextGO.AddComponent<RectTransform>();
+        dialogCloseTextRT.anchorMin = Vector2.zero;
+        dialogCloseTextRT.anchorMax = Vector2.one;
+        dialogCloseTextRT.offsetMin = Vector2.zero;
+        dialogCloseTextRT.offsetMax = Vector2.zero;
+        Text dialogCloseText = dialogCloseTextGO.AddComponent<Text>();
+        dialogCloseText.font = font;
+        dialogCloseText.fontSize = 14;
+        dialogCloseText.alignment = TextAnchor.MiddleCenter;
+        dialogCloseText.color = Color.white;
+        dialogCloseText.text = "Close";
+        dialogCloseButton.onClick.AddListener(() => ToggleLayersDialog());
+
+        dialogGO.SetActive(false);
+
         canvasGO.SetActive(false);
 
         return canvasGO;
+    }
+
+    private static void BuildLayerRow(GameObject dialogGO, Font font, string rowName, int rowIndex, string labelText, UnityEngine.Events.UnityAction onToggle)
+    {
+        GameObject rowGO = new GameObject(rowName);
+        rowGO.transform.SetParent(dialogGO.transform, false);
+        RectTransform rowRT = rowGO.AddComponent<RectTransform>();
+        rowRT.anchorMin = new Vector2(0f, 1f);
+        rowRT.anchorMax = new Vector2(1f, 1f);
+        rowRT.offsetMin = new Vector2(20f, -100f - rowIndex * 44f);
+        rowRT.offsetMax = new Vector2(-20f, -64f - rowIndex * 44f);
+        Button rowButton = rowGO.AddComponent<Button>();
+
+        GameObject statusGO = new GameObject("Status");
+        statusGO.transform.SetParent(rowGO.transform, false);
+        RectTransform statusRT = statusGO.AddComponent<RectTransform>();
+        statusRT.anchorMin = new Vector2(0f, 0.5f);
+        statusRT.anchorMax = new Vector2(0f, 0.5f);
+        statusRT.sizeDelta = new Vector2(16f, 16f);
+        statusRT.anchoredPosition = new Vector2(18f, 0f);
+        Image statusImage = statusGO.AddComponent<Image>();
+        statusImage.color = new Color(0.15f, 0.5f, 0.25f, 1f);
+        statusImage.raycastTarget = false;
+
+        GameObject nameGO = new GameObject("Name");
+        nameGO.transform.SetParent(rowGO.transform, false);
+        RectTransform nameRT = nameGO.AddComponent<RectTransform>();
+        nameRT.anchorMin = Vector2.zero;
+        nameRT.anchorMax = Vector2.one;
+        nameRT.offsetMin = new Vector2(44f, 0f);
+        nameRT.offsetMax = Vector2.zero;
+        Text nameText = nameGO.AddComponent<Text>();
+        nameText.font = font;
+        nameText.fontSize = 14;
+        nameText.alignment = TextAnchor.MiddleLeft;
+        nameText.color = Color.white;
+        nameText.text = labelText;
+        nameText.raycastTarget = false;
+
+        rowButton.onClick.AddListener(onToggle);
     }
 
     private static void SetButtonLabel(GameObject buttonGO, string labelText, Font font)
@@ -778,6 +977,289 @@ public class GalaxyMapController : MonoBehaviour
         }
     }
 
+    public static void ToggleLayersDialog()
+    {
+        if (mapCanvasGO == null)
+        {
+            return;
+        }
+
+        Transform panel = mapCanvasGO.transform.Find("MapPanel");
+
+        if (panel == null)
+        {
+            return;
+        }
+
+        Transform dialog = panel.Find("LayersDialog");
+
+        if (dialog != null)
+        {
+            dialog.gameObject.SetActive(!dialog.gameObject.activeSelf);
+        }
+    }
+
+    public static void SetGridLayer(bool visible)
+    {
+        showGridLayer = visible;
+        RefreshLayers();
+        RefreshLayersDialog();
+    }
+
+    public static void SetNamesLayer(bool visible)
+    {
+        showNamesLayer = visible;
+
+        if (map3DView != null)
+        {
+            map3DView.SetNamesVisible(showNamesLayer);
+        }
+        else
+        {
+            RefreshMapButtons();
+        }
+
+        RefreshLayersDialog();
+    }
+
+    // Official galactic grid: columns C-U left to right, rows 1-21 top to bottom.
+    // Cells are 1500x1500 galactic units: letter = floor((X + 13500) / 1500) from 'C',
+    // row = ceil((14400 - Y) / 1500). Verified: Tatooine (9665, -10099) -> R16.
+    private static void RefreshLayers()
+    {
+        if (map3DView != null)
+        {
+            map3DView.SetGridVisible(showGridLayer);
+            return;
+        }
+
+        if (mapCanvasGO == null)
+        {
+            return;
+        }
+
+        Transform panel = mapCanvasGO.transform.Find("MapPanel");
+
+        if (panel == null)
+        {
+            return;
+        }
+
+        Transform mapArea = panel.Find("MapArea");
+
+        if (mapArea != null)
+        {
+            Transform grid = mapArea.Find("GridLayer");
+
+            if (grid != null)
+            {
+                grid.gameObject.SetActive(showGridLayer);
+            }
+        }
+    }
+
+    private static void RefreshLayersDialog()
+    {
+        if (mapCanvasGO == null)
+        {
+            return;
+        }
+
+        Transform panel = mapCanvasGO.transform.Find("MapPanel");
+
+        if (panel == null)
+        {
+            return;
+        }
+
+        Transform dialog = panel.Find("LayersDialog");
+
+        if (dialog == null)
+        {
+            return;
+        }
+
+        Transform gridRow = dialog.Find("Row_Grid");
+        Transform namesRow = dialog.Find("Row_Names");
+
+        if (gridRow != null)
+        {
+            Transform status = gridRow.Find("Status");
+            Transform label = gridRow.Find("Name");
+
+            if (status != null)
+            {
+                status.GetComponent<Image>().color = showGridLayer ? new Color(0.15f, 0.5f, 0.25f, 1f) : new Color(0.35f, 0.35f, 0.35f, 1f);
+            }
+
+            if (label != null)
+            {
+                label.GetComponent<Text>().text = "Grid C-U / 1-21: " + (showGridLayer ? "ON" : "OFF");
+            }
+        }
+
+        if (namesRow != null)
+        {
+            Transform status = namesRow.Find("Status");
+            Transform label = namesRow.Find("Name");
+
+            if (status != null)
+            {
+                status.GetComponent<Image>().color = showNamesLayer ? new Color(0.15f, 0.5f, 0.25f, 1f) : new Color(0.35f, 0.35f, 0.35f, 1f);
+            }
+
+            if (label != null)
+            {
+                label.GetComponent<Text>().text = "System names: " + (showNamesLayer ? "ON" : "OFF");
+            }
+        }
+    }
+
+    private static void EnsureGridLayer(float minX, float maxX, float minY, float maxY, float rangeX, float rangeY, float areaW, float areaH)
+    {
+        if (mapCanvasGO == null)
+        {
+            return;
+        }
+
+        Transform panel = mapCanvasGO.transform.Find("MapPanel");
+
+        if (panel == null)
+        {
+            return;
+        }
+
+        Transform mapArea = panel.Find("MapArea");
+
+        if (mapArea == null)
+        {
+            return;
+        }
+
+        Transform existing = mapArea.Find("GridLayer");
+
+        if (existing != null)
+        {
+            GameObject.Destroy(existing.gameObject);
+        }
+
+        Font font = GetUIFont();
+
+        float contentW = Mathf.Max(0f, areaW - MapPadLeft - MapPadRight);
+        float contentH = Mathf.Max(0f, areaH - MapPadTop - MapPadBottom);
+
+        GameObject gridGO = new GameObject("GridLayer");
+        gridGO.transform.SetParent(mapArea, false);
+        RectTransform gridRT = gridGO.AddComponent<RectTransform>();
+        gridRT.anchorMin = Vector2.zero;
+        gridRT.anchorMax = Vector2.one;
+        gridRT.offsetMin = Vector2.zero;
+        gridRT.offsetMax = Vector2.zero;
+
+        Color lineColor = new Color(1f, 1f, 1f, 0.18f);
+        Color labelColor = new Color(1f, 1f, 1f, 0.6f);
+
+        // Vertical boundaries: X = -13500 + 1500 * k, k = 0..19 (columns C..U).
+        for (int k = 0; k <= 19; k++)
+        {
+            float xb = -13500f + 1500f * k;
+            float nx = (xb - minX) / rangeX;
+            float px = MapPadLeft + nx * contentW;
+
+            GameObject lineGO = new GameObject("GridV" + k);
+            lineGO.transform.SetParent(gridGO.transform, false);
+            RectTransform lineRT = lineGO.AddComponent<RectTransform>();
+            lineRT.anchorMin = new Vector2(0f, 1f);
+            lineRT.anchorMax = new Vector2(0f, 1f);
+            lineRT.pivot = new Vector2(0.5f, 1f);
+            lineRT.sizeDelta = new Vector2(2f, contentH);
+            lineRT.anchoredPosition = new Vector2(px, -MapPadTop);
+            Image lineImage = lineGO.AddComponent<Image>();
+            lineImage.color = lineColor;
+            lineImage.raycastTarget = false;
+        }
+
+        // Horizontal boundaries: Y = 14400 - 1500 * r, r = 0..21 (rows 1..21 below each line).
+        for (int r = 0; r <= 21; r++)
+        {
+            float yb = 14400f - 1500f * r;
+            float ny = (yb - minY) / rangeY;
+            float py = -(MapPadTop + (1f - ny) * contentH);
+
+            GameObject lineGO = new GameObject("GridH" + r);
+            lineGO.transform.SetParent(gridGO.transform, false);
+            RectTransform lineRT = lineGO.AddComponent<RectTransform>();
+            lineRT.anchorMin = new Vector2(0f, 1f);
+            lineRT.anchorMax = new Vector2(0f, 1f);
+            lineRT.pivot = new Vector2(0f, 1f);
+            lineRT.sizeDelta = new Vector2(contentW, 2f);
+            lineRT.anchoredPosition = new Vector2(MapPadLeft, py);
+            Image lineImage = lineGO.AddComponent<Image>();
+            lineImage.color = lineColor;
+            lineImage.raycastTarget = false;
+        }
+
+        // Column letters C..U centered over each column.
+        for (int c = 0; c < 19; c++)
+        {
+            float xc = -13500f + 1500f * (c + 0.5f);
+            float nx = (xc - minX) / rangeX;
+            float px = MapPadLeft + nx * contentW;
+
+            GameObject labelGO = new GameObject("GridCol" + c);
+            labelGO.transform.SetParent(gridGO.transform, false);
+            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+            labelRT.anchorMin = new Vector2(0f, 1f);
+            labelRT.anchorMax = new Vector2(0f, 1f);
+            labelRT.sizeDelta = new Vector2(30f, 20f);
+            labelRT.anchoredPosition = new Vector2(px, -MapPadTop / 2f);
+            Text label = labelGO.AddComponent<Text>();
+            label.font = font;
+            label.fontSize = 10;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = labelColor;
+            label.text = "" + (char)('C' + c);
+        }
+
+        // Row numbers 1..21 centered on each row.
+        for (int r = 1; r <= 21; r++)
+        {
+            float yc = 14400f - 1500f * (r - 0.5f);
+            float ny = (yc - minY) / rangeY;
+            float py = -(MapPadTop + (1f - ny) * contentH);
+
+            GameObject labelGO = new GameObject("GridRow" + r);
+            labelGO.transform.SetParent(gridGO.transform, false);
+            RectTransform labelRT = labelGO.AddComponent<RectTransform>();
+            labelRT.anchorMin = new Vector2(0f, 1f);
+            labelRT.anchorMax = new Vector2(0f, 1f);
+            labelRT.sizeDelta = new Vector2(40f, 20f);
+            labelRT.anchoredPosition = new Vector2(MapPadLeft / 2f, py);
+            Text label = labelGO.AddComponent<Text>();
+            label.font = font;
+            label.fontSize = 10;
+            label.alignment = TextAnchor.MiddleCenter;
+            label.color = labelColor;
+            label.text = r.ToString();
+        }
+
+        gridGO.SetActive(showGridLayer);
+    }
+
+    // Padding inside the map area so dots and labels never touch the edges.
+    private const float MapPadLeft = 70f;
+    private const float MapPadRight = 70f;
+    private const float MapPadTop = 34f;
+    private const float MapPadBottom = 30f;
+
+    private static void MapToArea(float nx, float ny, float areaW, float areaH, out float px, out float py)
+    {
+        float cw = Mathf.Max(0f, areaW - MapPadLeft - MapPadRight);
+        float ch = Mathf.Max(0f, areaH - MapPadTop - MapPadBottom);
+        px = MapPadLeft + nx * cw;
+        py = -(MapPadTop + (1f - ny) * ch);
+    }
+
     private static void RefreshMapButtons()
     {
         if (mapCanvasGO == null)
@@ -799,7 +1281,17 @@ public class GalaxyMapController : MonoBehaviour
             return;
         }
 
-        // Clear old system buttons (keep nothing else in MapArea).
+        if (map3DView != null)
+        {
+            Scene currentScene = SceneFunctions.GetScene();
+            string currentSystem = currentScene != null ? currentScene.currentLocation : "";
+            map3DView.SetSystems(GalaxyModeFunctions.GetStartSystems(), currentSystem, pendingDestination, SelectDestination);
+            map3DView.SetGridVisible(showGridLayer);
+            map3DView.SetNamesVisible(showNamesLayer);
+            return;
+        }
+
+        // Clear old map content (grid is rebuilt below with the current rect).
         for (int i = mapArea.childCount - 1; i >= 0; i--)
         {
             GameObject.Destroy(mapArea.GetChild(i).gameObject);
@@ -847,6 +1339,9 @@ public class GalaxyMapController : MonoBehaviour
         }
 
         Font font = GetUIFont();
+        Sprite dotSprite = GetOrCreateDotSprite();
+        Sprite ringSprite = GetOrCreateRingSprite();
+        List<Rect> placedLabels = new List<Rect>();
 
         foreach (StarSystem s in systems)
         {
@@ -856,50 +1351,181 @@ public class GalaxyMapController : MonoBehaviour
             GameObject btnGO = new GameObject("Sys_" + s.Planet);
             btnGO.transform.SetParent(mapArea, false);
             RectTransform btnRT = btnGO.AddComponent<RectTransform>();
-            btnRT.sizeDelta = new Vector2(150f, 30f);
+            btnRT.sizeDelta = new Vector2(72f, 52f);
             btnRT.anchorMin = new Vector2(0f, 1f);
             btnRT.anchorMax = new Vector2(0f, 1f);
-            float px = 10f + nx * Mathf.Max(0f, areaW - 170f);
-            float py = -(10f + (1f - ny) * Mathf.Max(0f, areaH - 40f));
+            float px;
+            float py;
+            MapToArea(nx, ny, areaW, areaH, out px, out py);
             btnRT.anchoredPosition = new Vector2(px, py);
 
             Button btn = btnGO.AddComponent<Button>();
-            Image img = btnGO.AddComponent<Image>();
+
+            // Transparent hit area: hover and click work over dot and text alike.
+            Image hitImage = btnGO.AddComponent<Image>();
+            hitImage.color = new Color(1f, 1f, 1f, 0f);
+
+            // Planet dot (generic sphere marker).
+            GameObject dotGO = new GameObject("Dot");
+            dotGO.transform.SetParent(btnGO.transform, false);
+            RectTransform dotRT = dotGO.AddComponent<RectTransform>();
+            dotRT.anchorMin = new Vector2(0.5f, 1f);
+            dotRT.anchorMax = new Vector2(0.5f, 1f);
+            dotRT.sizeDelta = new Vector2(24f, 24f);
+            dotRT.anchoredPosition = new Vector2(0f, -14f);
+            Image dotImage = dotGO.AddComponent<Image>();
+            dotImage.sprite = dotSprite;
+            dotImage.raycastTarget = false;
+
+            // Diffuse hover/selection ring around the dot.
+            GameObject ringGO = new GameObject("Ring");
+            ringGO.transform.SetParent(btnGO.transform, false);
+            RectTransform ringRT = ringGO.AddComponent<RectTransform>();
+            ringRT.anchorMin = new Vector2(0.5f, 1f);
+            ringRT.anchorMax = new Vector2(0.5f, 1f);
+            ringRT.sizeDelta = new Vector2(40f, 40f);
+            ringRT.anchoredPosition = new Vector2(0f, -14f);
+            Image ringImage = ringGO.AddComponent<Image>();
+            ringImage.sprite = ringSprite;
+            ringImage.color = new Color(1f, 0.85f, 0.4f, 0.95f);
+            ringImage.raycastTarget = false;
 
             bool isCurrent = s.Planet == current;
             bool isSelected = s.Planet == pendingDestination;
 
             if (isCurrent)
             {
-                img.color = new Color(0.15f, 0.5f, 0.25f, 1f);
+                dotImage.color = new Color(0.3f, 1f, 0.5f, 1f);
             }
             else if (isSelected)
             {
-                img.color = new Color(0.55f, 0.42f, 0.12f, 1f);
+                dotImage.color = new Color(1f, 0.75f, 0.25f, 1f);
             }
             else
             {
-                img.color = new Color(0.12f, 0.2f, 0.45f, 1f);
+                dotImage.color = new Color(0.55f, 0.75f, 1f, 1f);
             }
 
             btn.interactable = !isCurrent;
+            ringGO.SetActive(isSelected);
+
+            // Small label under the dot. Overlapping names are pushed down so
+            // texts of close systems never coincide (dots keep exact positions).
+            float labelShift = 0f;
+            Rect labelRect = new Rect(px - 20f, -py + 38f, 112f, 14f);
+            int guard = 0;
+
+            while (guard < 4 && placedLabels.Exists(r => r.Overlaps(labelRect)) && labelRect.yMax + 14f <= areaH - 2f)
+            {
+                labelShift -= 14f;
+                labelRect.y += 14f;
+                guard++;
+            }
+
+            placedLabels.Add(labelRect);
 
             GameObject labelGO = new GameObject("Text");
             labelGO.transform.SetParent(btnGO.transform, false);
             RectTransform labelRT = labelGO.AddComponent<RectTransform>();
-            labelRT.anchorMin = Vector2.zero;
-            labelRT.anchorMax = Vector2.one;
-            labelRT.offsetMin = Vector2.zero;
-            labelRT.offsetMax = Vector2.zero;
+            labelRT.anchorMin = new Vector2(0f, 0f);
+            labelRT.anchorMax = new Vector2(1f, 0f);
+            labelRT.offsetMin = new Vector2(-20f, labelShift);
+            labelRT.offsetMax = new Vector2(20f, 14f + labelShift);
             Text label = labelGO.AddComponent<Text>();
             label.font = font;
-            label.fontSize = 14;
+            label.fontSize = 12;
+            label.horizontalOverflow = HorizontalWrapMode.Overflow;
             label.alignment = TextAnchor.MiddleCenter;
-            label.color = Color.white;
+            label.color = new Color(0.85f, 0.9f, 1f, 1f);
             label.text = s.Planet;
+            labelGO.SetActive(showNamesLayer);
+
+            // Hover shows the diffuse ring; it stays on for the selection.
+            EventTrigger trigger = btnGO.AddComponent<EventTrigger>();
+
+            EventTrigger.Entry enter = new EventTrigger.Entry();
+            enter.eventID = EventTriggerType.PointerEnter;
+            enter.callback.AddListener((data) => { ringGO.SetActive(true); });
+
+            EventTrigger.Entry exit = new EventTrigger.Entry();
+            exit.eventID = EventTriggerType.PointerExit;
+            string selectedName = s.Planet;
+            exit.callback.AddListener((data) => { ringGO.SetActive(selectedName == pendingDestination); });
+
+            trigger.triggers.Add(enter);
+            trigger.triggers.Add(exit);
 
             string dest = s.Planet;
             btn.onClick.AddListener(() => SelectDestination(dest));
         }
+
+        EnsureGridLayer(minX, maxX, minY, maxY, rangeX, rangeY, areaW, areaH);
+    }
+
+    private static Sprite cachedDotSprite;
+    private static Sprite cachedRingSprite;
+
+    private static Sprite GetOrCreateDotSprite()
+    {
+        if (cachedDotSprite != null)
+        {
+            return cachedDotSprite;
+        }
+
+        int size = 128;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Vector2 center = new Vector2((size - 1) / 2f, (size - 1) / 2f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dist = Vector2.Distance(new Vector2(x, y), center) / (size / 2f);
+                float alpha = Mathf.Clamp01(1f - dist / 0.52f);
+                alpha *= alpha;
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+
+        texture.Apply();
+
+        cachedDotSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+        cachedDotSprite.name = "GalaxyMapDot";
+
+        return cachedDotSprite;
+    }
+
+    private static Sprite GetOrCreateRingSprite()
+    {
+        if (cachedRingSprite != null)
+        {
+            return cachedRingSprite;
+        }
+
+        int size = 128;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        texture.wrapMode = TextureWrapMode.Clamp;
+
+        Vector2 center = new Vector2((size - 1) / 2f, (size - 1) / 2f);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dist = Vector2.Distance(new Vector2(x, y), center) / (size / 2f);
+                float alpha = Mathf.Clamp01(1f - Mathf.Abs(dist - 0.78f) / 0.16f);
+                alpha *= alpha;
+                texture.SetPixel(x, y, new Color(1f, 1f, 1f, alpha));
+            }
+        }
+
+        texture.Apply();
+
+        cachedRingSprite = Sprite.Create(texture, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f), 100f);
+        cachedRingSprite.name = "GalaxyMapRing";
+
+        return cachedRingSprite;
     }
 }

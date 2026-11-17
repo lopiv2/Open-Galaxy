@@ -37,12 +37,23 @@ public class GalaxyMap3DView : MonoBehaviour
     private RenderTexture renderTexture;
     private GameObject cameraObject;
     private GameObject worldRoot;
+    private GameObject galaxyBackdrop;
+    private GameObject galaxyCore;
+    private ParticleSystem galaxyParticles;
     private Transform markersRoot;
     private Transform gridRoot;
     private Font font;
     private Material markerMaterial;
     private Material ringMaterial;
     private Material gridMaterial;
+    private Material galaxyBackdropMaterial;
+    private Material galaxyCoreMaterial;
+    private Texture2D galaxyTexture;
+    private Vector3 galaxyCenter;
+    private float galaxyPlaneY;
+    private const float PlanetsY = 20.2f;
+    private const float GridYOffset = -0.5f;
+    private const float GalaxyYOffset = -1.0f;
     private readonly List<Marker> markers = new List<Marker>();
     private readonly List<ProjectedLabel> gridLabels = new List<ProjectedLabel>();
     private Action<string> onSystemSelected;
@@ -52,13 +63,13 @@ public class GalaxyMap3DView : MonoBehaviour
     private string currentSystem;
     private string selectedSystem;
     private bool mapVisible;
-    private bool gridVisible = true;
+    private bool gridVisible;
     private bool namesVisible = true;
     private bool rightDragging;
     private bool middleDragging;
     private Vector2 lastPointer;
     private float yaw;
-    private float pitch = 25f;
+    private float pitch = 57f;
     private float cameraDistance = 58f;
     private float lastWidth;
     private float lastHeight;
@@ -107,6 +118,10 @@ public class GalaxyMap3DView : MonoBehaviour
         }
 
         viewTarget = sum / systems.Count;
+        viewTarget.y = PlanetsY;
+        galaxyCenter = viewTarget;
+        galaxyPlaneY = PlanetsY + GalaxyYOffset;
+        UpdateGalaxyBackdropPosition();
 
         foreach (StarSystem system in systems)
         {
@@ -212,6 +227,9 @@ public class GalaxyMap3DView : MonoBehaviour
         if (markerMaterial != null) Destroy(markerMaterial);
         if (ringMaterial != null) Destroy(ringMaterial);
         if (gridMaterial != null) Destroy(gridMaterial);
+        if (galaxyBackdropMaterial != null) Destroy(galaxyBackdropMaterial);
+        if (galaxyCoreMaterial != null) Destroy(galaxyCoreMaterial);
+        if (galaxyTexture != null) Destroy(galaxyTexture);
     }
 
     private void CreateWorld()
@@ -237,8 +255,218 @@ public class GalaxyMap3DView : MonoBehaviour
         }
 
         markerMaterial = new Material(unlit);
-        ringMaterial = CreateUnlitMaterial(unlit, new Color(1f, 0.82f, 0.34f, 0.95f), true);
-        gridMaterial = CreateUnlitMaterial(unlit, new Color(0.8f, 0.9f, 1f, 0.23f), true);
+        ringMaterial = CreateUnlitMaterial(unlit, Color.white, true);
+        gridMaterial = CreateUnlitMaterial(unlit, new Color(0.55f, 0.7f, 1f, 0.45f), true);
+        CreateGalaxyBackdrop(unlit);
+    }
+
+    private void CreateGalaxyBackdrop(Shader unlit)
+    {
+        const int armCount = 8;
+        const int particlesPerArm = 3600;
+        const int centralStarParticles = 1;
+        const int coreParticles = 3500;
+        const int fieldParticles = 1600;
+        const int nebulaParticles = 3500;
+        const int particleCount = centralStarParticles + coreParticles + armCount * particlesPerArm + fieldParticles + nebulaParticles;
+
+        System.Random random = new System.Random(41729);
+        ParticleSystem.Particle[] particles = new ParticleSystem.Particle[particleCount];
+        int particleIndex = 0;
+
+        SetGalaxyParticle(particles, particleIndex++, Vector3.zero, new Color(1f, 0.96f, 0.82f), 5f, 1f);
+
+        // Dense, luminous core: tight and near-white so the blue arms read clearly.
+        for (int i = 0; i < coreParticles; i++)
+        {
+            float angle = (float)random.NextDouble() * Mathf.PI * 2f;
+            float radius = Mathf.Pow((float)random.NextDouble(), 1.8f) * 9f;
+            Vector3 position = new Vector3(Mathf.Cos(angle) * radius, RandomSigned(random) * 0.12f, Mathf.Sin(angle) * radius * 0.9f);
+            Color color = Color.Lerp(new Color(1f, 0.93f, 0.78f), new Color(1f, 1f, 0.95f), (float)random.NextDouble());
+            float alpha = 0.94f + (float)random.NextDouble() * 0.06f;
+            float size = 0.24f + (float)random.NextDouble() * 0.16f;
+            SetGalaxyParticle(particles, particleIndex++, position, color, size, alpha);
+        }
+
+        // Eight spiral arms with dust-like scatter.
+        for (int i = 0; i < armCount * particlesPerArm; i++)
+        {
+            int arm = i % armCount;
+            float radius = 1.5f + Mathf.Pow((float)random.NextDouble(), 0.78f) * 54f;
+            float radialJitter = RandomSigned(random) * (0.75f + radius * 0.05f);
+            float angle = arm * (Mathf.PI * 2f / armCount)
+                + radius * 0.105f
+                + RandomSigned(random) * (0.035f + radius * 0.001f);
+            float scatteredRadius = Mathf.Max(0.5f, radius + radialJitter);
+            Vector3 position = new Vector3(
+                Mathf.Cos(angle) * scatteredRadius,
+                RandomSigned(random) * (0.08f + radius * 0.002f),
+                Mathf.Sin(angle) * scatteredRadius * 0.9f);
+            float coolness = Mathf.InverseLerp(22f, 82f, radius);
+            Color color = Color.Lerp(
+                new Color(0.62f, 0.82f, 1f),
+                new Color(0.2f, 0.45f, 1f),
+                coolness);
+            float alpha = 0.82f + (float)random.NextDouble() * 0.18f;
+            float size = 0.14f + (float)random.NextDouble() * 0.1f;
+            SetGalaxyParticle(particles, particleIndex++, position, color, size, alpha);
+        }
+
+        // A sparse field of blue-white stars outside the main arms.
+        for (int i = 0; i < fieldParticles; i++)
+        {
+            float angle = (float)random.NextDouble() * Mathf.PI * 2f;
+            float radius = 22f + (float)random.NextDouble() * 40f;
+            Vector3 position = new Vector3(
+                Mathf.Cos(angle) * radius,
+                RandomSigned(random) * 0.25f,
+                Mathf.Sin(angle) * radius * 0.9f);
+            Color color = Color.Lerp(
+                new Color(0.6f, 0.8f, 1f),
+                new Color(0.85f, 0.92f, 1f),
+                (float)random.NextDouble());
+            float alpha = 0.35f + (float)random.NextDouble() * 0.45f;
+            float size = 0.045f + (float)random.NextDouble() * 0.06f;
+            SetGalaxyParticle(particles, particleIndex++, position, color, size, alpha);
+        }
+
+        // Soft blue dust around each arm gives the star particles a nebula glow.
+        for (int i = 0; i < nebulaParticles; i++)
+        {
+            int arm = i % armCount;
+            float radius = 4f + Mathf.Pow((float)random.NextDouble(), 0.82f) * 50f;
+            float spread = RandomSigned(random) * (0.9f + radius * 0.045f);
+            float angle = arm * (Mathf.PI * 2f / armCount)
+                + radius * 0.105f
+                + RandomSigned(random) * (0.12f + radius * 0.002f);
+            float scatteredRadius = Mathf.Max(1f, radius + spread);
+            Vector3 position = new Vector3(
+                Mathf.Cos(angle) * scatteredRadius,
+                RandomSigned(random) * (0.12f + radius * 0.004f),
+                Mathf.Sin(angle) * scatteredRadius * 0.9f);
+            Color color = Color.Lerp(
+                new Color(0.16f, 0.32f, 0.62f),
+                new Color(0.42f, 0.58f, 0.82f),
+                (float)random.NextDouble());
+            float alpha = 0.08f + (float)random.NextDouble() * 0.07f;
+            float size = 0.6f + (float)random.NextDouble() * 0.6f;
+            SetGalaxyParticle(particles, particleIndex++, position, color, size, alpha);
+        }
+
+        galaxyTexture = CreateParticleTexture();
+        galaxyTexture.name = "GalaxyMap_StarParticle";
+        galaxyTexture.wrapMode = TextureWrapMode.Clamp;
+        galaxyTexture.filterMode = FilterMode.Bilinear;
+        galaxyTexture.Apply(false, true);
+
+        Shader particleShader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (particleShader == null) particleShader = Shader.Find("Particles/Standard Unlit");
+        if (particleShader == null) particleShader = unlit;
+
+        galaxyBackdropMaterial = CreateUnlitMaterial(particleShader, Color.white, true);
+        galaxyBackdropMaterial.name = "GalaxyMap_SpiralParticles";
+        galaxyBackdropMaterial.mainTexture = galaxyTexture;
+        galaxyBackdropMaterial.SetTexture("_BaseMap", galaxyTexture);
+        galaxyBackdropMaterial.SetTexture("_MainTex", galaxyTexture);
+        galaxyBackdropMaterial.SetInt("_DstBlend", (int)BlendMode.One);
+        galaxyBackdropMaterial.SetInt("_BlendOp", (int)BlendOp.Add);
+        galaxyBackdropMaterial.EnableKeyword("_ALPHABLEND_ON");
+        galaxyBackdropMaterial.renderQueue = (int)RenderQueue.Transparent;
+
+        galaxyBackdrop = new GameObject("GalaxySpiralParticles");
+        galaxyBackdrop.layer = MapLayer;
+        galaxyBackdrop.transform.SetParent(worldRoot.transform, false);
+        galaxyParticles = galaxyBackdrop.AddComponent<ParticleSystem>();
+
+        ParticleSystem.MainModule main = galaxyParticles.main;
+        main.loop = true;
+        main.playOnAwake = false;
+        main.simulationSpace = ParticleSystemSimulationSpace.Local;
+        main.maxParticles = particleCount;
+        main.startSpeed = 0f;
+        main.startLifetime = 100000f;
+        main.startSize = 1f;
+        main.startColor = Color.white;
+        main.gravityModifier = 0f;
+        ParticleSystem.EmissionModule emission = galaxyParticles.emission;
+        emission.enabled = false;
+
+        ParticleSystemRenderer particleRenderer = galaxyBackdrop.GetComponent<ParticleSystemRenderer>();
+        particleRenderer.renderMode = ParticleSystemRenderMode.Billboard;
+        particleRenderer.alignment = ParticleSystemRenderSpace.View;
+        particleRenderer.sortMode = ParticleSystemSortMode.None;
+        particleRenderer.sharedMaterial = galaxyBackdropMaterial;
+        particleRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        particleRenderer.receiveShadows = false;
+
+        galaxyCore = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        galaxyCore.name = "GalaxyCore";
+        galaxyCore.layer = MapLayer;
+        galaxyCore.transform.SetParent(worldRoot.transform, false);
+        galaxyCore.transform.localScale = Vector3.one * 3.2f;
+        galaxyCoreMaterial = CreateUnlitMaterial(unlit, new Color(1f, 0.96f, 0.82f, 1f), false);
+        galaxyCore.GetComponent<Renderer>().sharedMaterial = galaxyCoreMaterial;
+        Collider coreCollider = galaxyCore.GetComponent<Collider>();
+        if (coreCollider != null) Destroy(coreCollider);
+
+        galaxyParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        galaxyParticles.SetParticles(particles, particleIndex);
+        galaxyParticles.Play(false);
+        UpdateGalaxyBackdropPosition();
+    }
+
+    private static void SetGalaxyParticle(ParticleSystem.Particle[] particles, int index, Vector3 position, Color color, float size, float alpha)
+    {
+        ParticleSystem.Particle particle = new ParticleSystem.Particle();
+        particle.position = position;
+        particle.startColor = new Color(color.r, color.g, color.b, alpha);
+        particle.startSize = size;
+        particle.startLifetime = 100000f;
+        particle.remainingLifetime = 100000f;
+        particle.velocity = Vector3.zero;
+        particles[index] = particle;
+    }
+
+    private static float RandomSigned(System.Random random)
+    {
+        return (float)random.NextDouble() * 2f - 1f;
+    }
+
+    private static Texture2D CreateParticleTexture()
+    {
+        const int size = 32;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Color[] pixels = new Color[size * size];
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x - (size - 1) * 0.5f) / (size * 0.5f);
+                float dy = (y - (size - 1) * 0.5f) / (size * 0.5f);
+                float radiusSquared = dx * dx + dy * dy;
+                float halo = Mathf.Exp(-radiusSquared * 2.6f) * 0.72f;
+                float core = Mathf.Exp(-radiusSquared * 14f) * 0.4f;
+                float alpha = Mathf.Clamp01((halo + core) * Mathf.Clamp01(1.25f - radiusSquared));
+                pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+
+        texture.SetPixels(pixels);
+        return texture;
+    }
+
+    private void UpdateGalaxyBackdropPosition()
+    {
+        if (galaxyBackdrop != null)
+        {
+            galaxyBackdrop.transform.position = new Vector3(galaxyCenter.x, galaxyPlaneY, galaxyCenter.z);
+        }
+
+        if (galaxyCore != null)
+        {
+            galaxyCore.transform.position = new Vector3(galaxyCenter.x, galaxyPlaneY + 0.3f, galaxyCenter.z);
+        }
     }
 
     private static Material CreateUnlitMaterial(Shader shader, Color color, bool transparent)
@@ -271,7 +499,11 @@ public class GalaxyMap3DView : MonoBehaviour
             cameraObject.layer = MapLayer;
             mapCamera = cameraObject.AddComponent<Camera>();
             mapCamera.clearFlags = CameraClearFlags.SolidColor;
-            mapCamera.backgroundColor = new Color(0f, 0f, 0f, 0f);
+            // Opaque background: additive particles composite directly in the
+            // RenderTexture. With a transparent clear color the accumulated
+            // particle alpha darkens the quad edges when the RawImage blends
+            // over the panel ("black square" artifact).
+            mapCamera.backgroundColor = new Color(0.012f, 0.035f, 0.075f, 1f);
             mapCamera.cullingMask = 1 << MapLayer;
             mapCamera.nearClipPlane = 0.1f;
             mapCamera.farClipPlane = 300f;
@@ -322,8 +554,8 @@ public class GalaxyMap3DView : MonoBehaviour
 
     private static Vector3 ToMapPosition(StarSystem system)
     {
-        // Matches the project's StarSystems-to-starfield axis convention.
-        return new Vector3(system.X * CoordinateScale, system.Z * HeightScale, system.Y * CoordinateScale);
+        // Flat map: every system shares the same Y so nothing floats above/below.
+        return new Vector3(system.X * CoordinateScale, PlanetsY, system.Y * CoordinateScale);
     }
 
     private void CreateMarker(StarSystem system)
@@ -334,7 +566,7 @@ public class GalaxyMap3DView : MonoBehaviour
         markerGO.layer = MapLayer;
         markerGO.transform.SetParent(markersRoot, true);
         markerGO.transform.position = position;
-        markerGO.transform.localScale = Vector3.one * 1.15f;
+        markerGO.transform.localScale = Vector3.one * 0.78f;
 
         Renderer renderer = markerGO.GetComponent<Renderer>();
         renderer.sharedMaterial = markerMaterial;
@@ -352,14 +584,14 @@ public class GalaxyMap3DView : MonoBehaviour
         ring.useWorldSpace = false;
         ring.loop = true;
         ring.positionCount = 48;
-        ring.startWidth = 0.07f;
-        ring.endWidth = 0.07f;
+        ring.startWidth = 0.055f;
+        ring.endWidth = 0.055f;
         ring.sharedMaterial = ringMaterial;
         ring.startColor = ringMaterial.color;
         ring.endColor = ringMaterial.color;
         ring.enabled = false;
 
-        float radius = 1.3f;
+        float radius = 1.4f;
 
         for (int i = 0; i < ring.positionCount; i++)
         {
@@ -406,8 +638,8 @@ public class GalaxyMap3DView : MonoBehaviour
     {
         ClearGrid();
 
-        float planeY = viewTarget.y;
-        Color color = new Color(0.82f, 0.9f, 1f, 0.18f);
+        float planeY = viewTarget.y + GridYOffset;
+        Color color = new Color(0.65f, 0.78f, 1f, 0.55f);
 
         for (int column = 0; column <= 19; column++)
         {
@@ -456,8 +688,8 @@ public class GalaxyMap3DView : MonoBehaviour
         line.positionCount = 2;
         line.SetPosition(0, start);
         line.SetPosition(1, end);
-        line.startWidth = 0.055f;
-        line.endWidth = 0.055f;
+        line.startWidth = 0.09f;
+        line.endWidth = 0.09f;
         line.sharedMaterial = gridMaterial;
         line.startColor = color;
         line.endColor = color;
@@ -507,7 +739,12 @@ public class GalaxyMap3DView : MonoBehaviour
 
             marker.renderer.material.color = color;
             marker.gameObject.transform.localScale = marker.baseScale * (hovered ? 1.45f : selected ? 1.25f : 1f);
-            marker.hoverRing.enabled = hovered || selected;
+            Color ringColor = hovered || selected
+                ? new Color(1f, 0.78f, 0.3f, 0.95f)
+                : current ? new Color(0.3f, 1f, 0.58f, 0.9f) : new Color(0.25f, 0.62f, 1f, 0.62f);
+            marker.hoverRing.startColor = ringColor;
+            marker.hoverRing.endColor = ringColor;
+            marker.hoverRing.enabled = true;
 
             if (marker.label != null)
             {
@@ -616,12 +853,9 @@ public class GalaxyMap3DView : MonoBehaviour
             yaw += delta.x * 0.2f;
             pitch = Mathf.Clamp(pitch - delta.y * 0.15f, 8f, 70f);
         }
-        else
-        {
-            ApplyEdgePan(local);
-        }
-
         lastPointer = pointer;
+
+        ApplyArrowKeysPan();
 
         float scroll = Input.mouseScrollDelta.y;
         if (Mathf.Abs(scroll) > 0.01f)
@@ -679,24 +913,31 @@ public class GalaxyMap3DView : MonoBehaviour
         UpdateMarkerStates();
     }
 
-    private void ApplyEdgePan(Vector2 local)
+    private void ApplyArrowKeysPan()
     {
-        const float edge = 32f;
         float x = 0f;
         float y = 0f;
 
-        if (local.x < viewport.rect.xMin + edge) x = -1f;
-        else if (local.x > viewport.rect.xMax - edge) x = 1f;
-
-        if (local.y < viewport.rect.yMin + edge) y = -1f;
-        else if (local.y > viewport.rect.yMax - edge) y = 1f;
+        if (Input.GetKey(KeyCode.LeftArrow)) x -= 1f;
+        if (Input.GetKey(KeyCode.RightArrow)) x += 1f;
+        if (Input.GetKey(KeyCode.UpArrow)) y += 1f;
+        if (Input.GetKey(KeyCode.DownArrow)) y -= 1f;
 
         if (x != 0f || y != 0f)
         {
             Quaternion rotation = Quaternion.Euler(pitch, yaw, 0f);
-            float speed = cameraDistance * 0.45f * Time.unscaledDeltaTime;
+            float speed = cameraDistance * 0.9f * Time.unscaledDeltaTime;
             viewTarget += rotation * Vector3.right * x * speed;
-            viewTarget += rotation * Vector3.up * y * speed;
+
+            // Up/down pan across the map plane toward the top/bottom of the screen,
+            // keeping the same height (same as left/right, but on the other 2D axis).
+            Vector3 forward = rotation * Vector3.forward;
+            forward.y = 0f;
+
+            if (forward.sqrMagnitude > 0.0001f)
+            {
+                viewTarget += forward.normalized * y * speed;
+            }
         }
     }
 
@@ -709,9 +950,28 @@ public class GalaxyMap3DView : MonoBehaviour
         List<RaycastResult> results = new List<RaycastResult>();
         EventSystem.current.RaycastAll(pointer, results);
 
+        Transform panel = viewport != null ? viewport.parent : null;
+        Transform dialog = panel != null ? panel.Find("LayersDialog") : null;
+        Transform selectionBar = panel != null ? panel.Find("SelectionBar") : null;
+
         foreach (RaycastResult result in results)
         {
+            if (result.gameObject == null) continue;
+
             if (result.gameObject.GetComponentInParent<Button>() != null)
+            {
+                return true;
+            }
+
+            Transform hit = result.gameObject.transform;
+
+            // Clicking on dialog or selection-bar chrome must not pick a planet behind it.
+            if (dialog != null && (hit == dialog || hit.IsChildOf(dialog)))
+            {
+                return true;
+            }
+
+            if (selectionBar != null && (hit == selectionBar || hit.IsChildOf(selectionBar)))
             {
                 return true;
             }

@@ -25,9 +25,14 @@ public class GalaxyMapController : MonoBehaviour
     private static string pendingDestination;
     private static Text selectionText;
     private static Button jumpButton;
+    private static Text jumpButtonLabel;
+    private static List<StarSystem> galaxyMapSystems = new List<StarSystem>();
+    private static bool previewMode;
+    private static bool previewPreviousCursorVisible;
+    private static CursorLockMode previewPreviousCursorLock;
 
     // Map layers (Layers dialog).
-    private static bool showGridLayer = true;
+    private static bool showGridLayer = false;
     private static bool showNamesLayer = true;
 
     private float nextToggleTime;
@@ -37,6 +42,7 @@ public class GalaxyMapController : MonoBehaviour
         Instance = this;
         IsMapOpen = false;
         IsTraveling = false;
+        previewMode = false;
         mapCanvasGO = null;
         nextToggleTime = 0f;
     }
@@ -83,6 +89,7 @@ public class GalaxyMapController : MonoBehaviour
         pendingDestination = null;
         selectionText = null;
         jumpButton = null;
+        jumpButtonLabel = null;
     }
 
     void Update()
@@ -158,6 +165,7 @@ public class GalaxyMapController : MonoBehaviour
 
     public static void ShowMap()
     {
+        previewMode = false;
         Scene scene = SceneFunctions.GetScene();
 
         if (scene == null)
@@ -202,8 +210,49 @@ public class GalaxyMapController : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
     }
 
+    // Opens the map over the current Play Mode scene for visual testing.
+    // Preview selection is enabled, but hyperspace travel is intentionally disabled.
+    public static void ShowPreview()
+    {
+        if (IsMapOpen)
+        {
+            HideMap();
+        }
+
+        previewPreviousCursorVisible = Cursor.visible;
+        previewPreviousCursorLock = Cursor.lockState;
+        previewMode = true;
+        pendingDestination = null;
+
+        EnsureEventSystem();
+
+        if (mapCanvasGO == null)
+        {
+            mapCanvasGO = BuildMapCanvas();
+        }
+
+        mapCanvasGO.SetActive(true);
+        Canvas.ForceUpdateCanvases();
+
+        if (map3DView != null)
+        {
+            map3DView.SetVisible(true);
+        }
+
+        RefreshMapButtons();
+        RefreshLayers();
+        RefreshLayersDialog();
+        RefreshSelectionBar();
+
+        IsMapOpen = true;
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
+    }
+
     public static void HideMap()
     {
+        bool closingPreview = previewMode;
+
         if (mapCanvasGO != null)
         {
             Transform panel = mapCanvasGO.transform.Find("MapPanel");
@@ -228,6 +277,14 @@ public class GalaxyMapController : MonoBehaviour
 
         IsMapOpen = false;
         pendingDestination = null;
+        previewMode = false;
+
+        if (closingPreview)
+        {
+            Cursor.visible = previewPreviousCursorVisible;
+            Cursor.lockState = previewPreviousCursorLock;
+            return;
+        }
 
         // Only restore flight state if we are still in a galaxy mission.
         MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
@@ -250,7 +307,7 @@ public class GalaxyMapController : MonoBehaviour
 
         Scene scene = SceneFunctions.GetScene();
 
-        if (scene == null || scene.currentLocation == planetName)
+        if (!previewMode && (scene == null || scene.currentLocation == planetName))
         {
             return;
         }
@@ -277,7 +334,7 @@ public class GalaxyMapController : MonoBehaviour
 
     public static void TravelToSystem(string planetName)
     {
-        if (IsTraveling == true || string.IsNullOrEmpty(planetName))
+        if (previewMode || IsTraveling == true || string.IsNullOrEmpty(planetName))
         {
             return;
         }
@@ -645,50 +702,43 @@ public class GalaxyMapController : MonoBehaviour
         GameObject panelGO = new GameObject("MapPanel");
         panelGO.transform.SetParent(canvasGO.transform, false);
         RectTransform panelRT = panelGO.AddComponent<RectTransform>();
-        panelRT.anchorMin = new Vector2(0.03f, 0.04f);
-        panelRT.anchorMax = new Vector2(0.97f, 0.96f);
+        panelRT.anchorMin = Vector2.zero;
+        panelRT.anchorMax = Vector2.one;
         panelRT.offsetMin = Vector2.zero;
         panelRT.offsetMax = Vector2.zero;
         panelRT.anchoredPosition = Vector2.zero;
         Image panelImage = panelGO.AddComponent<Image>();
-        panelImage.color = new Color(0.04f, 0.05f, 0.1f, 0.97f);
+        panelImage.color = new Color(0.01f, 0.025f, 0.055f, 0.18f);
+        panelImage.raycastTarget = false;
 
-        // Title.
+        // Compact navigation title, styled as a small in-game HUD.
         GameObject titleGO = new GameObject("Title");
         titleGO.transform.SetParent(panelGO.transform, false);
         RectTransform titleRT = titleGO.AddComponent<RectTransform>();
         titleRT.anchorMin = new Vector2(0f, 1f);
-        titleRT.anchorMax = new Vector2(1f, 1f);
-        titleRT.sizeDelta = new Vector2(0f, 50f);
-        titleRT.anchoredPosition = new Vector2(0f, -25f);
+        titleRT.anchorMax = new Vector2(0f, 1f);
+        titleRT.sizeDelta = new Vector2(480f, 44f);
+        titleRT.anchoredPosition = new Vector2(365f, -30f);
         Text titleText = titleGO.AddComponent<Text>();
         titleText.font = font;
-        titleText.fontSize = 24;
-        titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.color = Color.white;
-        titleText.text = "GALAXY MAP - select a system, then confirm the jump  (M to close)";
+        titleText.fontSize = 19;
+        titleText.fontStyle = FontStyle.Bold;
+        titleText.alignment = TextAnchor.MiddleLeft;
+        titleText.color = new Color(0.72f, 0.88f, 1f, 1f);
+        titleText.text = "GALACTIC ATLAS  /  SYSTEM NAVIGATION";
 
-        // Map area (buttons get positioned in here by galactic X/Y).
+        // The 3D starfield fills the screen; controls float above it.
         GameObject mapAreaGO = new GameObject("MapArea");
         mapAreaGO.transform.SetParent(panelGO.transform, false);
         RectTransform mapRT = mapAreaGO.AddComponent<RectTransform>();
-        mapRT.anchorMin = new Vector2(0f, 0f);
-        mapRT.anchorMax = new Vector2(1f, 1f);
-        mapRT.offsetMin = new Vector2(20f, 140f);
-        mapRT.offsetMax = new Vector2(-20f, -60f);
+        mapRT.anchorMin = Vector2.zero;
+        mapRT.anchorMax = Vector2.one;
+        mapRT.offsetMin = Vector2.zero;
+        mapRT.offsetMax = Vector2.zero;
         Image mapImage = mapAreaGO.AddComponent<Image>();
-        mapImage.color = new Color(0.02f, 0.03f, 0.08f, 1f);
+        mapImage.color = new Color(0.012f, 0.035f, 0.075f, 1f);
         mapImage.preserveAspect = false;
         mapAreaGO.AddComponent<Mask>();
-
-        // Galaxy chart backdrop (SW-Galaxy_back.jpg in Resources).
-        Texture2D galaxyBackdrop = Resources.Load<Texture2D>(OGGetAddress.menus + "galaxy_map/SW-Galaxy_back");
-
-        if (galaxyBackdrop != null)
-        {
-            mapImage.sprite = Sprite.Create(galaxyBackdrop, new Rect(0f, 0f, galaxyBackdrop.width, galaxyBackdrop.height), new Vector2(0.5f, 0.5f), 100f);
-            mapImage.color = Color.white;
-        }
 
         GameObject map3DOutputGO = new GameObject("GalaxyMap3DOutput");
         map3DOutputGO.transform.SetParent(mapAreaGO.transform, false);
@@ -704,59 +754,89 @@ public class GalaxyMapController : MonoBehaviour
         map3DViewGO = new GameObject("GalaxyMap3DView");
         map3DView = map3DViewGO.AddComponent<GalaxyMap3DView>();
         map3DView.Initialize(mapRT, map3DOutput, font);
+        titleGO.transform.SetAsLastSibling();
 
-        // Footer info.
+        // Minimal control hints stay out of the way of the starfield.
         GameObject footerGO = new GameObject("Footer");
         footerGO.transform.SetParent(panelGO.transform, false);
         RectTransform footerRT = footerGO.AddComponent<RectTransform>();
         footerRT.anchorMin = new Vector2(0f, 0f);
-        footerRT.anchorMax = new Vector2(1f, 0f);
-        footerRT.sizeDelta = new Vector2(0f, 60f);
-        footerRT.anchoredPosition = new Vector2(0f, 30f);
+        footerRT.anchorMax = new Vector2(0f, 0f);
+        footerRT.sizeDelta = new Vector2(620f, 44f);
+        footerRT.anchoredPosition = new Vector2(330f, 25f);
         Text footerText = footerGO.AddComponent<Text>();
         footerText.font = font;
-        footerText.fontSize = 16;
-        footerText.alignment = TextAnchor.MiddleCenter;
-        footerText.color = new Color(0.7f, 0.8f, 1f);
-        footerText.text = "Green = current system. Travel uses hyperspace stretch effect.";
+        footerText.fontSize = 12;
+        footerText.alignment = TextAnchor.MiddleLeft;
+        footerText.color = new Color(0.7f, 0.82f, 1f, 0.85f);
+        footerText.text = "LEFT CLICK: SELECT   •   RIGHT DRAG / ARROWS: PAN   •   MIDDLE DRAG: ORBIT   •   SCROLL: ZOOM   •   M: CLOSE";
 
         // Destination confirmation bar. Selecting a planet never starts travel
         // until the player presses JUMP; Cancel returns to flight without jumping.
         GameObject selectionBarGO = new GameObject("SelectionBar");
         selectionBarGO.transform.SetParent(panelGO.transform, false);
         RectTransform selectionBarRT = selectionBarGO.AddComponent<RectTransform>();
-        selectionBarRT.anchorMin = new Vector2(0f, 0f);
-        selectionBarRT.anchorMax = new Vector2(1f, 0f);
-        selectionBarRT.sizeDelta = new Vector2(0f, 48f);
-        selectionBarRT.anchoredPosition = new Vector2(0f, 85f);
+        selectionBarRT.anchorMin = new Vector2(1f, 0.5f);
+        selectionBarRT.anchorMax = new Vector2(1f, 0.5f);
+        selectionBarRT.sizeDelta = new Vector2(360f, 248f);
+        selectionBarRT.anchoredPosition = new Vector2(-190f, 0f);
         Image selectionBarImage = selectionBarGO.AddComponent<Image>();
-        selectionBarImage.color = new Color(0.07f, 0.1f, 0.17f, 0.98f);
+        selectionBarImage.color = new Color(0.015f, 0.07f, 0.13f, 0.92f);
+        Outline selectionOutline = selectionBarGO.AddComponent<Outline>();
+        selectionOutline.effectColor = new Color(0.12f, 0.62f, 1f, 0.95f);
+        selectionOutline.effectDistance = new Vector2(2f, 2f);
+
+        GameObject selectionTitleGO = new GameObject("SelectionTitle");
+        selectionTitleGO.transform.SetParent(selectionBarGO.transform, false);
+        RectTransform selectionTitleRT = selectionTitleGO.AddComponent<RectTransform>();
+        selectionTitleRT.anchorMin = new Vector2(0f, 1f);
+        selectionTitleRT.anchorMax = new Vector2(1f, 1f);
+        selectionTitleRT.sizeDelta = new Vector2(0f, 46f);
+        selectionTitleRT.anchoredPosition = new Vector2(0f, -23f);
+        Text selectionTitle = selectionTitleGO.AddComponent<Text>();
+        selectionTitle.font = font;
+        selectionTitle.fontSize = 18;
+        selectionTitle.fontStyle = FontStyle.Bold;
+        selectionTitle.alignment = TextAnchor.MiddleLeft;
+        selectionTitle.color = new Color(0.8f, 0.93f, 1f, 1f);
+        selectionTitle.text = "   SYSTEM INTEL";
+
+        GameObject selectionAccentGO = new GameObject("SelectionAccent");
+        selectionAccentGO.transform.SetParent(selectionBarGO.transform, false);
+        RectTransform selectionAccentRT = selectionAccentGO.AddComponent<RectTransform>();
+        selectionAccentRT.anchorMin = new Vector2(0f, 1f);
+        selectionAccentRT.anchorMax = new Vector2(1f, 1f);
+        selectionAccentRT.sizeDelta = new Vector2(0f, 2f);
+        selectionAccentRT.anchoredPosition = new Vector2(0f, -47f);
+        Image selectionAccent = selectionAccentGO.AddComponent<Image>();
+        selectionAccent.color = new Color(0.1f, 0.55f, 0.9f, 0.9f);
 
         GameObject selectionTextGO = new GameObject("SelectedDestination");
         selectionTextGO.transform.SetParent(selectionBarGO.transform, false);
         RectTransform selectionTextRT = selectionTextGO.AddComponent<RectTransform>();
-        selectionTextRT.anchorMin = Vector2.zero;
-        selectionTextRT.anchorMax = Vector2.one;
-        selectionTextRT.offsetMin = new Vector2(20f, 0f);
-        selectionTextRT.offsetMax = new Vector2(-310f, 0f);
+        selectionTextRT.anchorMin = new Vector2(0f, 0f);
+        selectionTextRT.anchorMax = new Vector2(1f, 1f);
+        selectionTextRT.offsetMin = new Vector2(18f, 62f);
+        selectionTextRT.offsetMax = new Vector2(-18f, -56f);
         selectionText = selectionTextGO.AddComponent<Text>();
         selectionText.font = font;
-        selectionText.fontSize = 16;
-        selectionText.alignment = TextAnchor.MiddleLeft;
-        selectionText.color = Color.white;
+        selectionText.fontSize = 14;
+        selectionText.alignment = TextAnchor.UpperLeft;
+        selectionText.color = new Color(0.82f, 0.89f, 0.98f, 1f);
+        selectionText.lineSpacing = 1.1f;
         selectionText.text = "Select a destination system...";
 
         GameObject jumpGO = new GameObject("JumpButton");
         jumpGO.transform.SetParent(selectionBarGO.transform, false);
         RectTransform jumpRT = jumpGO.AddComponent<RectTransform>();
-        jumpRT.anchorMin = new Vector2(1f, 0.5f);
-        jumpRT.anchorMax = new Vector2(1f, 0.5f);
-        jumpRT.sizeDelta = new Vector2(130f, 36f);
-        jumpRT.anchoredPosition = new Vector2(-220f, 0f);
+        jumpRT.sizeDelta = new Vector2(150f, 38f);
+        jumpRT.anchorMin = new Vector2(1f, 0f);
+        jumpRT.anchorMax = new Vector2(1f, 0f);
+        jumpRT.anchoredPosition = new Vector2(-98f, 28f);
         jumpButton = jumpGO.AddComponent<Button>();
         Image jumpImage = jumpGO.AddComponent<Image>();
         jumpImage.color = new Color(0.12f, 0.45f, 0.2f, 1f);
-        SetButtonLabel(jumpGO, "JUMP", font);
+        jumpButtonLabel = SetButtonLabel(jumpGO, "JUMP", font);
         jumpButton.interactable = false;
         jumpButton.onClick.AddListener(() =>
         {
@@ -769,10 +849,10 @@ public class GalaxyMapController : MonoBehaviour
         GameObject cancelGO = new GameObject("CancelButton");
         cancelGO.transform.SetParent(selectionBarGO.transform, false);
         RectTransform cancelRT = cancelGO.AddComponent<RectTransform>();
-        cancelRT.anchorMin = new Vector2(1f, 0.5f);
-        cancelRT.anchorMax = new Vector2(1f, 0.5f);
-        cancelRT.sizeDelta = new Vector2(130f, 36f);
-        cancelRT.anchoredPosition = new Vector2(-75f, 0f);
+        cancelRT.sizeDelta = new Vector2(90f, 38f);
+        cancelRT.anchorMin = new Vector2(0f, 0f);
+        cancelRT.anchorMax = new Vector2(0f, 0f);
+        cancelRT.anchoredPosition = new Vector2(65f, 28f);
         Button cancelButton = cancelGO.AddComponent<Button>();
         Image cancelImage = cancelGO.AddComponent<Image>();
         cancelImage.color = new Color(0.45f, 0.15f, 0.12f, 1f);
@@ -822,7 +902,7 @@ public class GalaxyMapController : MonoBehaviour
         layersRT.anchorMin = new Vector2(0f, 1f);
         layersRT.anchorMax = new Vector2(0f, 1f);
         layersRT.sizeDelta = new Vector2(110f, 36f);
-        layersRT.anchoredPosition = new Vector2(75f, -25f);
+        layersRT.anchoredPosition = new Vector2(75f, -82f);
         Button layersButton = layersGO.AddComponent<Button>();
         Image layersImage = layersGO.AddComponent<Image>();
         layersImage.color = new Color(0.12f, 0.2f, 0.45f, 1f);
@@ -910,6 +990,8 @@ public class GalaxyMapController : MonoBehaviour
         rowRT.offsetMin = new Vector2(20f, -100f - rowIndex * 44f);
         rowRT.offsetMax = new Vector2(-20f, -64f - rowIndex * 44f);
         Button rowButton = rowGO.AddComponent<Button>();
+        Image rowImage = rowGO.AddComponent<Image>();
+        rowImage.color = new Color(0.1f, 0.16f, 0.28f, 0.6f);
 
         GameObject statusGO = new GameObject("Status");
         statusGO.transform.SetParent(rowGO.transform, false);
@@ -940,7 +1022,7 @@ public class GalaxyMapController : MonoBehaviour
         rowButton.onClick.AddListener(onToggle);
     }
 
-    private static void SetButtonLabel(GameObject buttonGO, string labelText, Font font)
+    private static Text SetButtonLabel(GameObject buttonGO, string labelText, Font font)
     {
         GameObject textGO = new GameObject("Text");
         textGO.transform.SetParent(buttonGO.transform, false);
@@ -956,6 +1038,7 @@ public class GalaxyMapController : MonoBehaviour
         label.alignment = TextAnchor.MiddleCenter;
         label.color = Color.white;
         label.text = labelText;
+        return label;
     }
 
     private static void RefreshSelectionBar()
@@ -965,16 +1048,70 @@ public class GalaxyMapController : MonoBehaviour
             return;
         }
 
+        Scene scene = SceneFunctions.GetScene();
+
+        if (previewMode)
+        {
+            if (string.IsNullOrEmpty(pendingDestination))
+            {
+                selectionText.text = "PREVIEW MODE\n\nClick a system marker to inspect its data.";
+            }
+            else
+            {
+                StarSystem previewDestination = FindMapSystem(pendingDestination);
+                selectionText.text = previewDestination != null
+                    ? FormatSystemDetails("PREVIEW SYSTEM", previewDestination)
+                    : "PREVIEW SYSTEM\n" + pendingDestination;
+            }
+
+            jumpButton.interactable = false;
+            if (jumpButtonLabel != null) jumpButtonLabel.text = "PREVIEW";
+            return;
+        }
+
+        if (jumpButtonLabel != null) jumpButtonLabel.text = "JUMP";
+
         if (string.IsNullOrEmpty(pendingDestination))
         {
-            selectionText.text = "Select a destination system...";
+            string current = scene != null ? scene.currentLocation : "";
+            StarSystem currentData = FindMapSystem(current);
+            selectionText.text = currentData != null
+                ? FormatSystemDetails("CURRENT SYSTEM", currentData) + "\n\nSelect a star to chart a destination."
+                : "No system selected.\n\nSelect a star marker to inspect its data and plan a hyperspace jump.";
             jumpButton.interactable = false;
         }
         else
         {
-            selectionText.text = "Destination: " + pendingDestination + " — confirm to travel.";
+            StarSystem destination = FindMapSystem(pendingDestination);
+            selectionText.text = destination != null
+                ? FormatSystemDetails("DESTINATION", destination)
+                : "DESTINATION\n" + pendingDestination;
             jumpButton.interactable = true;
         }
+    }
+
+    private static StarSystem FindMapSystem(string planetName)
+    {
+        if (string.IsNullOrEmpty(planetName) || galaxyMapSystems == null)
+        {
+            return null;
+        }
+
+        return galaxyMapSystems.Find(system => system != null && system.Planet == planetName);
+    }
+
+    private static string FormatSystemDetails(string heading, StarSystem system)
+    {
+        List<string> details = new List<string>();
+        details.Add(heading);
+        details.Add(system.Planet);
+
+        if (!string.IsNullOrEmpty(system.Region)) details.Add("Region: " + system.Region);
+        if (!string.IsNullOrEmpty(system.Sector)) details.Add("Sector: " + system.Sector);
+        if (!string.IsNullOrEmpty(system.Grid)) details.Add("Grid: " + system.Grid);
+        if (!string.IsNullOrEmpty(system.faction)) details.Add("Faction: " + system.faction);
+
+        return string.Join("\n", details);
     }
 
     public static void ToggleLayersDialog()
@@ -1281,11 +1418,13 @@ public class GalaxyMapController : MonoBehaviour
             return;
         }
 
+        galaxyMapSystems = GalaxyModeFunctions.GetStartSystems();
+
         if (map3DView != null)
         {
             Scene currentScene = SceneFunctions.GetScene();
             string currentSystem = currentScene != null ? currentScene.currentLocation : "";
-            map3DView.SetSystems(GalaxyModeFunctions.GetStartSystems(), currentSystem, pendingDestination, SelectDestination);
+            map3DView.SetSystems(galaxyMapSystems, currentSystem, pendingDestination, SelectDestination);
             map3DView.SetGridVisible(showGridLayer);
             map3DView.SetNamesVisible(showNamesLayer);
             return;

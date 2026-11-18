@@ -20,6 +20,7 @@ public class StarSystem
     public string faction;
     public float planetDistance;
     public List<StarSystemSun> suns;
+    public List<HyperrouteStop> hyperrouteStops;
 }
 
 [System.Serializable]
@@ -29,6 +30,16 @@ public class StarSystemSun
     public float angle;
     public float distance;
     public float scale;
+}
+
+// A stop of a star system on a hyperroute, read from StarSystems.json
+// ("hyperrouteStops": [{ "route": "Corellian Run", "order": 0 }]).
+// Stops are sorted by order to draw the route legs.
+[System.Serializable]
+public class HyperrouteStop
+{
+    public string route;
+    public int order;
 }
 
 [System.Serializable]

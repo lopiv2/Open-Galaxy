@@ -36,7 +36,9 @@ public static class GalaxyModeFunctions
         "Scarif",
         "Sullust",
         "Dagobah",
-        "Mon Calamari"
+        "Mon Calamari",
+        "Wrea",
+        "Smuggler's Run"
     };
 
     // Ships with cockpit that the player can fly.

@@ -5919,7 +5919,8 @@
             "seed": 5225,
             "SystemSunType": "normal",
             "planetType": "tropical",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 1 }]
         },
         {
             "Planet": "Corlass",
@@ -6031,7 +6032,8 @@
             "seed": 7278,
             "SystemSunType": "normal",
             "planetType": "city",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 0 }]
         },
         {
             "Planet": "Corva Yag",
@@ -27903,7 +27905,8 @@
             "seed": 5181,
             "SystemSunType": "normal",
             "planetType": "ice",
-            "faction": "independent"
+            "faction": "independent",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 3 }]
         },
         {
             "Planet": "Sneeve",
@@ -33151,7 +33154,8 @@
             "seed": 3870,
             "SystemSunType": "normal",
             "planetType": "volcanic",
-            "faction": "independent"
+            "faction": "independent",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 2 }]
         },
         {
             "Planet": "Wroona",

@@ -23,9 +23,10 @@ public class GalaxyMap3DView : MonoBehaviour
         public Vector3 position;
         public GameObject gameObject;
         public Renderer renderer;
+        public GameObject halo;
+        public Renderer haloRenderer;
         public LineRenderer hoverRing;
         public Text label;
-        public Vector3 baseScale;
     }
 
     private sealed class ProjectedLabel
@@ -47,10 +48,14 @@ public class GalaxyMap3DView : MonoBehaviour
     private ParticleSystem galaxyParticles;
     private Transform markersRoot;
     private Transform gridRoot;
+    private Transform routesRoot;
     private Font font;
     private Material markerMaterial;
     private Material ringMaterial;
     private Material gridMaterial;
+    private Material routeMaterial;
+    private Material haloMaterial;
+    private Texture2D haloTexture;
     private Material galaxyBackdropMaterial;
     private Material galaxyCoreMaterial;
     private Texture2D galaxyTexture;
@@ -61,12 +66,31 @@ public class GalaxyMap3DView : MonoBehaviour
     private const float GalaxyYOffset = -1.0f;
     private readonly List<Marker> markers = new List<Marker>();
     private readonly List<ProjectedLabel> gridLabels = new List<ProjectedLabel>();
+    private readonly List<GameObject> routeLines = new List<GameObject>();
     private Action<string> onSystemSelected;
 
-    private const float MarkerBaseScale = 0.82f;
-    private const float MarkerRingRadius = 1.15f;
-    private const float MarkerColliderRadius = 0.72f;
-    private const float MarkerLabelHeight = 1f;
+    // Small bright core + soft halo, SWTOR-atlas style. Labels only show when
+    // zoomed in past labelsMaxDistance so the overview stays readable.
+    // These are public so you can tune them live in Play Mode: open the map,
+    // select the GalaxyMap3DView object and move the sliders.
+    [Header("Marker style")]
+    [Tooltip("Diameter of the 3D planet spheres.")]
+    [Range(0.1f, 1.5f)]
+    public float planetSize = 0.34f;
+    [Tooltip("Diameter of the glow halo behind each planet.")]
+    [Range(0.5f, 4f)]
+    public float haloSize = 1.6f;
+    [Tooltip("How far below the planet its name sits (world units).")]
+    [Range(0.2f, 2f)]
+    public float labelHeight = 0.55f;
+    [Tooltip("Size of the planet name text.")]
+    [Range(8, 20)]
+    public int labelFontSize = 12;
+    [Tooltip("Planet names hide when the camera is farther than this.")]
+    [Range(20f, 180f)]
+    public float labelsMaxDistance = 56f;
+    private const float MarkerRingRadius = 2.9f;
+    private const float MarkerColliderRadius = 1.8f;
     private Vector3 viewTarget;
     private Marker hoveredMarker;
     private string currentSystem;
@@ -142,6 +166,7 @@ public class GalaxyMap3DView : MonoBehaviour
             CreateMarker(system);
         }
 
+        CreateRouteLines();
         CreateGrid();
         UpdateMarkerStates();
         SetGridVisible(gridVisible);
@@ -224,6 +249,24 @@ public class GalaxyMap3DView : MonoBehaviour
             return;
         }
 
+        // Keep every halo quad facing the camera (billboard) and in sync with
+        // the live sliders (haloSize, planetSize apply every frame).
+        Quaternion faceCamera = mapCamera.transform.rotation;
+
+        foreach (Marker marker in markers)
+        {
+            if (marker.halo != null)
+            {
+                marker.halo.transform.rotation = faceCamera;
+                marker.halo.transform.localScale = Vector3.one * haloSize;
+            }
+
+            if (marker.gameObject != null)
+            {
+                marker.gameObject.transform.localScale = Vector3.one * planetSize * GetMarkerScaleMultiplier(marker);
+            }
+        }
+
         UpdateProjectedLabels();
     }
 
@@ -241,6 +284,9 @@ public class GalaxyMap3DView : MonoBehaviour
         if (markerMaterial != null) Destroy(markerMaterial);
         if (ringMaterial != null) Destroy(ringMaterial);
         if (gridMaterial != null) Destroy(gridMaterial);
+        if (routeMaterial != null) Destroy(routeMaterial);
+        if (haloMaterial != null) Destroy(haloMaterial);
+        if (haloTexture != null) Destroy(haloTexture);
         if (galaxyBackdropMaterial != null) Destroy(galaxyBackdropMaterial);
         if (galaxyCoreMaterial != null) Destroy(galaxyCoreMaterial);
         if (galaxyTexture != null) Destroy(galaxyTexture);
@@ -261,6 +307,10 @@ public class GalaxyMap3DView : MonoBehaviour
         gridRootGO.transform.SetParent(worldRoot.transform, false);
         gridRoot = gridRootGO.transform;
 
+        GameObject routesRootGO = new GameObject("Routes");
+        routesRootGO.transform.SetParent(worldRoot.transform, false);
+        routesRoot = routesRootGO.transform;
+
         Shader unlit = Shader.Find("Universal Render Pipeline/Unlit");
 
         if (unlit == null)
@@ -268,9 +318,67 @@ public class GalaxyMap3DView : MonoBehaviour
             unlit = Shader.Find("Unlit/Color");
         }
 
-        markerMaterial = new Material(unlit);
+        // Planet cores are real 3D spheres with a lit material so they read as
+        // volumes (highlight + shaded side) instead of flat discs. The map has
+        // its own key light restricted to the map layer for a consistent look.
+        Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+
+        if (lit == null)
+        {
+            lit = Shader.Find("Standard");
+        }
+
+        markerMaterial = new Material(lit);
+
+        if (markerMaterial.HasProperty("_BaseColor"))
+        {
+            markerMaterial.SetColor("_BaseColor", Color.white);
+        }
+        else
+        {
+            markerMaterial.SetColor("_Color", Color.white);
+        }
+
+        if (markerMaterial.HasProperty("_Smoothness"))
+        {
+            markerMaterial.SetFloat("_Smoothness", 0.55f);
+        }
+        else if (markerMaterial.HasProperty("_Glossiness"))
+        {
+            markerMaterial.SetFloat("_Glossiness", 0.55f);
+        }
+
+        if (markerMaterial.HasProperty("_Metallic"))
+        {
+            markerMaterial.SetFloat("_Metallic", 0.1f);
+        }
+
+        GameObject lightGO = new GameObject("MapKeyLight");
+        lightGO.layer = MapLayer;
+        lightGO.transform.SetParent(worldRoot.transform, false);
+        lightGO.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
+        Light keyLight = lightGO.AddComponent<Light>();
+        keyLight.type = LightType.Directional;
+        keyLight.color = new Color(1f, 0.96f, 0.9f);
+        keyLight.intensity = 1.4f;
+        keyLight.cullingMask = 1 << MapLayer;
+        keyLight.shadows = LightShadows.None;
+
         ringMaterial = CreateUnlitMaterial(unlit, Color.white, true);
         gridMaterial = CreateUnlitMaterial(unlit, new Color(0.55f, 0.7f, 1f, 0.45f), true);
+        routeMaterial = CreateUnlitMaterial(unlit, new Color(1f, 0.62f, 0.15f, 0.85f), true);
+
+        // Soft radial glow textured onto a camera-facing quad per system.
+        haloTexture = CreateHaloTexture();
+        haloTexture.name = "GalaxyMap_Halo";
+        haloTexture.wrapMode = TextureWrapMode.Clamp;
+        haloTexture.filterMode = FilterMode.Bilinear;
+        haloTexture.Apply(false, true);
+        haloMaterial = CreateUnlitMaterial(unlit, Color.white, true);
+        haloMaterial.name = "GalaxyMap_HaloMaterial";
+        haloMaterial.mainTexture = haloTexture;
+        haloMaterial.SetTexture("_BaseMap", haloTexture);
+        haloMaterial.SetTexture("_MainTex", haloTexture);
         CreateGalaxyBackdrop(unlit);
     }
 
@@ -446,6 +554,30 @@ public class GalaxyMap3DView : MonoBehaviour
         return (float)random.NextDouble() * 2f - 1f;
     }
 
+    private static Texture2D CreateHaloTexture()
+    {
+        const int size = 64;
+        Texture2D texture = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        Color[] pixels = new Color[size * size];
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x - (size - 1) * 0.5f) / (size * 0.5f);
+                float dy = (y - (size - 1) * 0.5f) / (size * 0.5f);
+                float r = Mathf.Sqrt(dx * dx + dy * dy);
+                float core = Mathf.Exp(-r * r * 18f);
+                float glow = Mathf.Exp(-r * r * 4.5f) * 0.55f;
+                float alpha = Mathf.Clamp01(core + glow) * Mathf.Clamp01(1.15f - r);
+                pixels[y * size + x] = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+
+        texture.SetPixels(pixels);
+        return texture;
+    }
+
     private static Texture2D CreateParticleTexture()
     {
         const int size = 32;
@@ -580,7 +712,7 @@ public class GalaxyMap3DView : MonoBehaviour
         markerGO.layer = MapLayer;
         markerGO.transform.SetParent(markersRoot, true);
         markerGO.transform.position = position;
-        markerGO.transform.localScale = Vector3.one * MarkerBaseScale;
+        markerGO.transform.localScale = Vector3.one * planetSize;
 
         Renderer renderer = markerGO.GetComponent<Renderer>();
         renderer.sharedMaterial = markerMaterial;
@@ -591,6 +723,24 @@ public class GalaxyMap3DView : MonoBehaviour
         collider.radius = MarkerColliderRadius;
         collider.isTrigger = true;
 
+        // Soft glow disc behind the core. Kept as a sibling (not a child) so
+        // hover/selection scaling of the core never stretches the halo.
+        GameObject haloGO = GameObject.CreatePrimitive(PrimitiveType.Quad);
+        haloGO.name = "Halo_" + system.Planet;
+        haloGO.layer = MapLayer;
+        haloGO.transform.SetParent(markersRoot, true);
+        haloGO.transform.position = position;
+        haloGO.transform.localScale = Vector3.one * haloSize;
+        Collider haloCollider = haloGO.GetComponent<Collider>();
+
+        if (haloCollider != null)
+        {
+            Destroy(haloCollider);
+        }
+
+        Renderer haloRenderer = haloGO.GetComponent<Renderer>();
+        haloRenderer.sharedMaterial = haloMaterial;
+
         GameObject ringGO = new GameObject("HoverRing");
         ringGO.layer = MapLayer;
         ringGO.transform.SetParent(markerGO.transform, false);
@@ -598,8 +748,8 @@ public class GalaxyMap3DView : MonoBehaviour
         ring.useWorldSpace = false;
         ring.loop = true;
         ring.positionCount = 48;
-        ring.startWidth = 0.035f;
-        ring.endWidth = 0.035f;
+        ring.startWidth = 0.04f;
+        ring.endWidth = 0.04f;
         ring.sharedMaterial = ringMaterial;
         ring.startColor = ringMaterial.color;
         ring.endColor = ringMaterial.color;
@@ -613,16 +763,17 @@ public class GalaxyMap3DView : MonoBehaviour
             ring.SetPosition(i, new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius));
         }
 
-        Text label = CreateProjectedLabel(system.Planet, font, 12);
+        Text label = CreateProjectedLabel(system.Planet, font, labelFontSize);
         Marker marker = new Marker
         {
             system = system,
             position = position,
             gameObject = markerGO,
             renderer = renderer,
+            halo = haloGO,
+            haloRenderer = haloRenderer,
             hoverRing = ring,
-            label = label,
-            baseScale = markerGO.transform.localScale
+            label = label
         };
 
         markers.Add(marker);
@@ -717,11 +868,98 @@ public class GalaxyMap3DView : MonoBehaviour
         foreach (Marker marker in markers)
         {
             if (marker.gameObject != null) Destroy(marker.gameObject);
+            if (marker.halo != null) Destroy(marker.halo);
             if (marker.label != null) Destroy(marker.label.gameObject);
         }
 
         markers.Clear();
         hoveredMarker = null;
+        ClearRouteLines();
+    }
+
+    // Tints a lit (URP Lit / Standard) material: base color plus a proportional
+    // emission lift so the shaded side of the sphere never goes full black.
+    private static void SetLitBaseColor(Renderer renderer, Color color, float emissionBoost)
+    {
+        Material material = renderer.material;
+
+        if (material.HasProperty("_BaseColor"))
+        {
+            material.SetColor("_BaseColor", color);
+        }
+        else
+        {
+            material.SetColor("_Color", color);
+        }
+
+        if (material.HasProperty("_EmissionColor"))
+        {
+            material.EnableKeyword("_EMISSION");
+            material.SetColor("_EmissionColor", color * emissionBoost);
+        }
+    }
+
+    private void CreateRouteLines()
+    {
+        ClearRouteLines();
+
+        if (routesRoot == null || GalaxyRoutes.Routes == null)
+        {
+            return;
+        }
+
+        // Corellian Run gold (per-route colors can be added as more routes land).
+        Color routeColor = new Color(1f, 0.62f, 0.15f, 0.85f);
+
+        foreach (GalaxyRoutes.Hyperroute route in GalaxyRoutes.Routes)
+        {
+            if (route == null || route.SystemsInOrder == null || route.SystemsInOrder.Length < 2)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < route.SystemsInOrder.Length - 1; i++)
+            {
+                Marker a = markers.Find(marker => marker.system.Planet == route.SystemsInOrder[i]);
+                Marker b = markers.Find(marker => marker.system.Planet == route.SystemsInOrder[i + 1]);
+
+                // Only draw legs where both stops are on the current map.
+                if (a == null || b == null)
+                {
+                    continue;
+                }
+
+                CreateRouteLine(a.position, b.position, routeColor);
+            }
+        }
+    }
+
+    private void CreateRouteLine(Vector3 start, Vector3 end, Color color)
+    {
+        GameObject lineGO = new GameObject("RouteLine");
+        lineGO.layer = MapLayer;
+        lineGO.transform.SetParent(routesRoot, false);
+        LineRenderer line = lineGO.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.positionCount = 2;
+        line.SetPosition(0, start);
+        line.SetPosition(1, end);
+        line.startWidth = 0.09f;
+        line.endWidth = 0.09f;
+        line.sharedMaterial = routeMaterial;
+        line.startColor = color;
+        line.endColor = color;
+        routeLines.Add(lineGO);
+    }
+
+    private void ClearRouteLines()
+    {
+        foreach (GameObject line in routeLines)
+        {
+            if (line != null) Destroy(line);
+        }
+
+        routeLines.Clear();
     }
 
     private void ClearGrid()
@@ -742,9 +980,18 @@ public class GalaxyMap3DView : MonoBehaviour
         gridLabels.Clear();
     }
 
-    private void UpdateMarkerStates()
+    private float GetMarkerScaleMultiplier(Marker marker)
     {
-        foreach (Marker marker in markers)
+        if (marker == hoveredMarker)
+        {
+            return 1.5f;
+        }
+
+        return marker.system.Planet == selectedSystem ? 1.3f : 1f;
+    }
+
+    private void UpdateMarkerStates()
+    {        foreach (Marker marker in markers)
         {
             bool current = marker.system.Planet == currentSystem;
             bool selected = marker.system.Planet == selectedSystem;
@@ -752,10 +999,20 @@ public class GalaxyMap3DView : MonoBehaviour
 
             Color color = current
                 ? new Color(0.25f, 1f, 0.5f, 1f)
-                : selected ? new Color(1f, 0.72f, 0.2f, 1f) : new Color(0.58f, 0.78f, 1f, 1f);
+                : selected ? new Color(1f, 0.72f, 0.2f, 1f) : new Color(0.82f, 0.9f, 1f, 1f);
 
-            marker.renderer.material.color = color;
-            marker.gameObject.transform.localScale = marker.baseScale * (hovered ? 1.25f : selected ? 1.15f : 1f);
+            Color haloColor = current
+                ? new Color(0.25f, 0.85f, 0.45f, 0.65f)
+                : selected || hovered ? new Color(1f, 0.6f, 0.2f, 0.7f) : new Color(0.62f, 0.16f, 0.13f, 0.55f);
+
+            SetLitBaseColor(marker.renderer, color, 0.35f);
+
+            if (marker.haloRenderer != null)
+            {
+                marker.haloRenderer.material.color = haloColor;
+            }
+
+            marker.gameObject.transform.localScale = Vector3.one * planetSize * GetMarkerScaleMultiplier(marker);
             Color ringColor = hovered || selected
                 ? new Color(1f, 0.78f, 0.3f, 0.95f)
                 : current ? new Color(0.3f, 1f, 0.58f, 0.9f) : new Color(0.25f, 0.62f, 1f, 0.62f);
@@ -778,9 +1035,18 @@ public class GalaxyMap3DView : MonoBehaviour
         Rect rect = viewport.rect;
         List<Rect> occupied = new List<Rect>();
 
+        // Planet names only show when zoomed in: the overview stays clean and
+        // the markers can stay small without overlapping text.
+        bool showPlanetLabels = namesVisible && cameraDistance <= labelsMaxDistance;
+
         foreach (Marker marker in markers)
         {
-            UpdateLabelPosition(marker.position + Vector3.up * MarkerLabelHeight, marker.label, rect, occupied, namesVisible);
+            if (marker.label != null)
+            {
+                marker.label.fontSize = labelFontSize;
+            }
+
+            UpdateLabelPosition(marker.position + Vector3.down * labelHeight, marker.label, rect, occupied, showPlanetLabels);
         }
 
         foreach (ProjectedLabel label in gridLabels)

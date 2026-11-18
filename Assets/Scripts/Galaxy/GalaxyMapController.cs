@@ -1111,6 +1111,23 @@ public class GalaxyMapController : MonoBehaviour
         if (!string.IsNullOrEmpty(system.Grid)) details.Add("Grid: " + system.Grid);
         if (!string.IsNullOrEmpty(system.faction)) details.Add("Faction: " + system.faction);
 
+        // Hyperroute info: which route(s) the system belongs to, direct
+        // neighbours, and terminus status (e.g. Smuggler's Run ends the Corellian Run).
+        List<GalaxyRoutes.Hyperroute> routes = GalaxyRoutes.GetRoutesForSystem(system.Planet);
+
+        foreach (GalaxyRoutes.Hyperroute route in routes)
+        {
+            string suffix = route.IsTerminus(system.Planet) ? " (terminus)" : "";
+            details.Add("Route: " + route.Name + suffix);
+        }
+
+        List<string> connections = GalaxyRoutes.GetConnectedSystems(system.Planet);
+
+        if (connections.Count > 0)
+        {
+            details.Add("Connected: " + string.Join(", ", connections.ToArray()));
+        }
+
         return string.Join("\n", details);
     }
 

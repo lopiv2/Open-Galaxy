@@ -1161,7 +1161,7 @@ public class GalaxyMapController : MonoBehaviour
 
     // Official galactic grid: columns C-U left to right, rows 1-21 top to bottom.
     // Cells are 1500x1500 galactic units: letter = floor((X + 13500) / 1500) from 'C',
-    // row = ceil((14400 - Y) / 1500). Verified: Tatooine (9665, -10099) -> R16.
+    // row = ceil((13500 - Y) / 1500). Verified: Tatooine (9665, -10099) -> R16.
     private static void RefreshLayers()
     {
         if (map3DView != null)
@@ -1316,10 +1316,10 @@ public class GalaxyMapController : MonoBehaviour
             lineImage.raycastTarget = false;
         }
 
-        // Horizontal boundaries: Y = 14400 - 1500 * r, r = 0..21 (rows 1..21 below each line).
+        // Horizontal boundaries: Y = 13500 - 1500 * r, r = 0..21 (rows 1..21 below each line).
         for (int r = 0; r <= 21; r++)
         {
-            float yb = 14400f - 1500f * r;
+            float yb = 13500f - 1500f * r;
             float ny = (yb - minY) / rangeY;
             float py = -(MapPadTop + (1f - ny) * contentH);
 
@@ -1358,10 +1358,11 @@ public class GalaxyMapController : MonoBehaviour
             label.text = "" + (char)('C' + c);
         }
 
-        // Row numbers 1..21 centered on each row.
+        // Row numbers 1..21, one per row centered inside the first-column (C) cells.
+        float firstColX = MapPadLeft + ((-13500f + 750f - minX) / rangeX) * contentW;
         for (int r = 1; r <= 21; r++)
         {
-            float yc = 14400f - 1500f * (r - 0.5f);
+            float yc = 13500f - 1500f * (r - 0.5f);
             float ny = (yc - minY) / rangeY;
             float py = -(MapPadTop + (1f - ny) * contentH);
 
@@ -1371,7 +1372,7 @@ public class GalaxyMapController : MonoBehaviour
             labelRT.anchorMin = new Vector2(0f, 1f);
             labelRT.anchorMax = new Vector2(0f, 1f);
             labelRT.sizeDelta = new Vector2(40f, 20f);
-            labelRT.anchoredPosition = new Vector2(MapPadLeft / 2f, py);
+            labelRT.anchoredPosition = new Vector2(firstColX, py);
             Text label = labelGO.AddComponent<Text>();
             label.font = font;
             label.fontSize = 10;

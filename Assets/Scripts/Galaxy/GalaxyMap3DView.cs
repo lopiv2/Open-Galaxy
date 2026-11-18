@@ -13,6 +13,9 @@ public class GalaxyMap3DView : MonoBehaviour
     private const int MapLayer = 31;
     private const float CoordinateScale = 50f / 15000f;
     private const float HeightScale = 25f / 15000f;
+    private const float GridOriginX = -13500f;
+    private const float GridTopY = 13500f;
+    private const float GridCellSize = 1500f;
 
     private sealed class Marker
     {
@@ -29,6 +32,8 @@ public class GalaxyMap3DView : MonoBehaviour
     {
         public Vector3 position;
         public Text text;
+        public bool pinToLeftEdge;
+        public int gridRow;
     }
 
     private RectTransform viewport;
@@ -58,6 +63,10 @@ public class GalaxyMap3DView : MonoBehaviour
     private readonly List<ProjectedLabel> gridLabels = new List<ProjectedLabel>();
     private Action<string> onSystemSelected;
 
+    private const float MarkerBaseScale = 0.82f;
+    private const float MarkerRingRadius = 1.15f;
+    private const float MarkerColliderRadius = 0.72f;
+    private const float MarkerLabelHeight = 1f;
     private Vector3 viewTarget;
     private Marker hoveredMarker;
     private string currentSystem;
@@ -119,7 +128,12 @@ public class GalaxyMap3DView : MonoBehaviour
 
         viewTarget = sum / systems.Count;
         viewTarget.y = PlanetsY;
-        galaxyCenter = viewTarget;
+        // Place the spiral origin at the center of grid cell K11.
+        // Coruscant (0,0) then sits naturally above/right toward K-L / rows 9-10.
+        galaxyCenter = new Vector3(
+            (GridOriginX + (8f + 0.5f) * GridCellSize) * CoordinateScale,
+            PlanetsY,
+            (GridTopY - (11f - 0.5f) * GridCellSize) * CoordinateScale);
         galaxyPlaneY = PlanetsY + GalaxyYOffset;
         UpdateGalaxyBackdropPosition();
 
@@ -566,7 +580,7 @@ public class GalaxyMap3DView : MonoBehaviour
         markerGO.layer = MapLayer;
         markerGO.transform.SetParent(markersRoot, true);
         markerGO.transform.position = position;
-        markerGO.transform.localScale = Vector3.one * 0.78f;
+        markerGO.transform.localScale = Vector3.one * MarkerBaseScale;
 
         Renderer renderer = markerGO.GetComponent<Renderer>();
         renderer.sharedMaterial = markerMaterial;
@@ -574,7 +588,7 @@ public class GalaxyMap3DView : MonoBehaviour
         pickMarker.planetName = system.Planet;
 
         SphereCollider collider = markerGO.GetComponent<SphereCollider>();
-        collider.radius = 0.75f;
+        collider.radius = MarkerColliderRadius;
         collider.isTrigger = true;
 
         GameObject ringGO = new GameObject("HoverRing");
@@ -584,14 +598,14 @@ public class GalaxyMap3DView : MonoBehaviour
         ring.useWorldSpace = false;
         ring.loop = true;
         ring.positionCount = 48;
-        ring.startWidth = 0.055f;
-        ring.endWidth = 0.055f;
+        ring.startWidth = 0.035f;
+        ring.endWidth = 0.035f;
         ring.sharedMaterial = ringMaterial;
         ring.startColor = ringMaterial.color;
         ring.endColor = ringMaterial.color;
         ring.enabled = false;
 
-        float radius = 1.4f;
+        float radius = MarkerRingRadius;
 
         for (int i = 0; i < ring.positionCount; i++)
         {
@@ -614,7 +628,7 @@ public class GalaxyMap3DView : MonoBehaviour
         markers.Add(marker);
     }
 
-    private Text CreateProjectedLabel(string value, Font labelFont, int size)
+    private Text CreateProjectedLabel(string value, Font labelFont, int size, float width = 140f)
     {
         GameObject labelGO = new GameObject("MapLabel_" + value);
         labelGO.transform.SetParent(viewport, false);
@@ -622,11 +636,12 @@ public class GalaxyMap3DView : MonoBehaviour
         rect.anchorMin = new Vector2(0.5f, 0.5f);
         rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.sizeDelta = new Vector2(140f, 20f);
+        rect.sizeDelta = new Vector2(width, 20f);
 
         Text text = labelGO.AddComponent<Text>();
         text.font = labelFont;
         text.fontSize = size;
+        text.text = value;
         text.alignment = TextAnchor.MiddleCenter;
         text.color = new Color(0.88f, 0.92f, 1f, 0.95f);
         text.raycastTarget = false;
@@ -643,37 +658,39 @@ public class GalaxyMap3DView : MonoBehaviour
 
         for (int column = 0; column <= 19; column++)
         {
-            float x = (-13500f + 1500f * column) * CoordinateScale;
-            CreateGridLine(new Vector3(x, planeY, 14400f * CoordinateScale), new Vector3(x, planeY, -17100f * CoordinateScale), color);
+            float x = (GridOriginX + GridCellSize * column) * CoordinateScale;
+            CreateGridLine(new Vector3(x, planeY, GridTopY * CoordinateScale), new Vector3(x, planeY, (GridTopY - 21f * GridCellSize) * CoordinateScale), color);
         }
 
         for (int row = 0; row <= 21; row++)
         {
-            float z = (14400f - 1500f * row) * CoordinateScale;
-            CreateGridLine(new Vector3(-13500f * CoordinateScale, planeY, z), new Vector3(15000f * CoordinateScale, planeY, z), color);
+            float z = (GridTopY - GridCellSize * row) * CoordinateScale;
+            CreateGridLine(new Vector3(GridOriginX * CoordinateScale, planeY, z), new Vector3((GridOriginX + 19f * GridCellSize) * CoordinateScale, planeY, z), color);
         }
 
         for (int column = 0; column < 19; column++)
         {
-            float x = (-13500f + 1500f * (column + 0.5f)) * CoordinateScale;
+            float x = (GridOriginX + GridCellSize * (column + 0.5f)) * CoordinateScale;
             ProjectedLabel label = new ProjectedLabel
             {
-                position = new Vector3(x, planeY, 14400f * CoordinateScale),
-                text = CreateProjectedLabel(((char)('C' + column)).ToString(), font, 10)
+                position = new Vector3(x, planeY, (GridTopY - GridCellSize * 0.5f) * CoordinateScale),
+                text = CreateProjectedLabel(((char)('C' + column)).ToString(), font, 12, 40f)
             };
-            label.text.color = new Color(1f, 1f, 1f, 0.66f);
+            label.text.color = new Color(1f, 1f, 1f, 0.9f);
             gridLabels.Add(label);
         }
 
         for (int row = 1; row <= 21; row++)
         {
-            float z = (14400f - 1500f * (row - 0.5f)) * CoordinateScale;
+            float z = (GridTopY - GridCellSize * (row - 0.5f)) * CoordinateScale;
             ProjectedLabel label = new ProjectedLabel
             {
-                position = new Vector3(-13500f * CoordinateScale, planeY, z),
-                text = CreateProjectedLabel(row.ToString(), font, 10)
+                position = new Vector3((GridOriginX + GridCellSize * 0.5f) * CoordinateScale, planeY, z),
+                text = CreateProjectedLabel(row.ToString(), font, 14, 40f),
+                gridRow = row
             };
-            label.text.color = new Color(1f, 1f, 1f, 0.66f);
+            label.text.color = Color.white;
+            label.text.fontStyle = FontStyle.Bold;
             gridLabels.Add(label);
         }
     }
@@ -688,8 +705,8 @@ public class GalaxyMap3DView : MonoBehaviour
         line.positionCount = 2;
         line.SetPosition(0, start);
         line.SetPosition(1, end);
-        line.startWidth = 0.09f;
-        line.endWidth = 0.09f;
+        line.startWidth = 0.045f;
+        line.endWidth = 0.045f;
         line.sharedMaterial = gridMaterial;
         line.startColor = color;
         line.endColor = color;
@@ -738,7 +755,7 @@ public class GalaxyMap3DView : MonoBehaviour
                 : selected ? new Color(1f, 0.72f, 0.2f, 1f) : new Color(0.58f, 0.78f, 1f, 1f);
 
             marker.renderer.material.color = color;
-            marker.gameObject.transform.localScale = marker.baseScale * (hovered ? 1.45f : selected ? 1.25f : 1f);
+            marker.gameObject.transform.localScale = marker.baseScale * (hovered ? 1.25f : selected ? 1.15f : 1f);
             Color ringColor = hovered || selected
                 ? new Color(1f, 0.78f, 0.3f, 0.95f)
                 : current ? new Color(0.3f, 1f, 0.58f, 0.9f) : new Color(0.25f, 0.62f, 1f, 0.62f);
@@ -763,21 +780,55 @@ public class GalaxyMap3DView : MonoBehaviour
 
         foreach (Marker marker in markers)
         {
-            UpdateLabelPosition(marker.position + Vector3.up * 0.9f, marker.label, rect, occupied, namesVisible);
+            UpdateLabelPosition(marker.position + Vector3.up * MarkerLabelHeight, marker.label, rect, occupied, namesVisible);
         }
 
         foreach (ProjectedLabel label in gridLabels)
         {
-            UpdateLabelPosition(label.position, label.text, rect, occupied, gridVisible);
+            Vector3 labelPosition = label.gridRow > 0
+                ? FindLeftmostVisibleCellCenter(label.gridRow, label.position.y)
+                : label.position;
+            UpdateLabelPosition(labelPosition, label.text, rect, occupied, gridVisible, label.pinToLeftEdge);
         }
     }
 
-    private void UpdateLabelPosition(Vector3 worldPosition, Text label, Rect rect, List<Rect> occupied, bool visible)
+    // Keep row numbers inside the leftmost grid cell that is actually visible
+    // after the user pans/zooms the 3D map. Column C may be outside the view.
+    private Vector3 FindLeftmostVisibleCellCenter(int row, float planeY)
+    {
+        float rowZ = (GridTopY - GridCellSize * (row - 0.5f)) * CoordinateScale;
+        Vector3 fallback = new Vector3((GridOriginX + GridCellSize * 0.5f) * CoordinateScale, planeY, rowZ);
+        float leftmostViewportX = float.MaxValue;
+        Vector3 best = fallback;
+
+        for (int column = 0; column < 19; column++)
+        {
+            float cellX = (GridOriginX + GridCellSize * (column + 0.5f)) * CoordinateScale;
+            Vector3 candidate = new Vector3(cellX, planeY, rowZ);
+            Vector3 projected = mapCamera.WorldToViewportPoint(candidate);
+
+            if (projected.z <= 0f || projected.x < 0.02f || projected.x > 0.98f || projected.y < 0.02f || projected.y > 0.98f)
+            {
+                continue;
+            }
+
+            if (projected.x < leftmostViewportX)
+            {
+                leftmostViewportX = projected.x;
+                best = candidate;
+            }
+        }
+
+        return best;
+    }
+
+    private void UpdateLabelPosition(Vector3 worldPosition, Text label, Rect rect, List<Rect> occupied, bool visible, bool pinToLeftEdge = false)
     {
         if (label == null) return;
 
         Vector3 projected = mapCamera.WorldToViewportPoint(worldPosition);
-        bool onScreen = projected.z > 0f && projected.x >= 0f && projected.x <= 1f && projected.y >= 0f && projected.y <= 1f;
+        bool horizontalVisible = projected.x >= 0f && projected.x <= 1f;
+        bool onScreen = projected.z > 0f && (horizontalVisible || pinToLeftEdge) && projected.y >= 0f && projected.y <= 1f;
 
         if (!visible || !onScreen)
         {
@@ -787,7 +838,9 @@ public class GalaxyMap3DView : MonoBehaviour
 
         label.gameObject.SetActive(true);
         RectTransform labelRect = label.rectTransform;
-        float x = (projected.x - 0.5f) * rect.width;
+        float x = pinToLeftEdge
+            ? rect.xMin + labelRect.sizeDelta.x * 0.5f + 8f
+            : (projected.x - 0.5f) * rect.width;
         float y = (projected.y - 0.5f) * rect.height - 13f;
         Vector2 size = labelRect.sizeDelta;
         Rect screenRect = new Rect(x - size.x * 0.5f, y - size.y * 0.5f, size.x, size.y);

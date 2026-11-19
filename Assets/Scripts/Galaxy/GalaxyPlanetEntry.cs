@@ -62,6 +62,11 @@ public class GalaxyPlanetEntry : MonoBehaviour
     // Floating-origin freeze for planet flight (plan B): the scene anchor is
     // reset to zero on entry and restored on exit, so RecenterScene never
     // fires mid-flight. Suspended below 50 km in SceneFunctions instead.
+    // Wide turn-around radius while roaming: terrain streams endlessly, so
+    // the 15 km limit must not bite. Finite (not infinite) to avoid
+    // float-precision/physics issues far from the origin.
+    private const float PlanetSceneRadius = 60000f;
+    private float savedSceneRadius = 15000f;
     private Vector3 savedAnchorPosition = Vector3.zero;
     private bool savedAnchorValid = false;
     private float planetLogTimer = 0f;
@@ -311,6 +316,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
         scene.transform.position = Vector3.zero;
         Debug.Log("[PlanetDiag] entry anchor was " + savedAnchorPosition + ", reset to zero.");
 
+        // Wide turn-around limit for planet roaming (restored on exit).
+        savedSceneRadius = scene.sceneRadius;
+        SceneFunctions.SetSceneRadius(PlanetSceneRadius);
+
         // Desert day sky + sandy haze. The binary suns stay where they are
         // (their flares still glow through the haze from the ground).
         TrySetSkybox("loworbit_desert_png01", "loworbit_desert01", "sky_clouds01");
@@ -324,7 +333,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         yield return null;
         yield return new WaitForFixedUpdate();
 
-        float entryAltitude = CloudDeckAltitude + EntryAltitudeAboveClouds;
+        float entryAltitude = scene.transform.position.y + CloudDeckAltitude + EntryAltitudeAboveClouds;
         Vector3 shipPos = mainShip.transform.position;
         float groundAtSpawn = SampleGroundHeight(new Vector3(shipPos.x, entryAltitude + 1000f, shipPos.z));
         float safeAltitude = float.IsNaN(groundAtSpawn)
@@ -357,14 +366,19 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
         int seed = GetSeedForSystem(scene.currentLocation);
         terrainGO = new GameObject("PlanetTerrain");
-        terrainGO.transform.position = Vector3.zero;
+        // Child of the scene anchor: recenters move terrain rigidly with the
+        // ship instead of leaving it behind.
+        terrainGO.transform.SetParent(scene.transform, false);
+        terrainGO.transform.localPosition = Vector3.zero;
         terrainGO.transform.rotation = Quaternion.identity;
         streamer = terrainGO.AddComponent<TerrainStreamer>();
         streamer.seed = seed;
         streamer.ship = scene.mainShip.transform;
         streamer.tileParent = terrainGO.transform;
         streamer.terrainTextureType = "sandy";
-        streamer.tileRadiusInKilometres = 2;
+        streamer.tileRadiusInKilometres = 3;
+        // Distant ring to the horizon: fogged out, hides the terrain edge.
+        streamer.outerTileRadiusInKilometres = 8;
         streamer.maxTerrainHeight = MaxTerrainHeightTatooine;
         streamer.plainsAmp = 25f;
         streamer.desertAmp = 90f;
@@ -503,6 +517,8 @@ public class GalaxyPlanetEntry : MonoBehaviour
             Debug.Log("[PlanetDiag] exit anchor restored to " + savedAnchorPosition + ".");
         }
 
+        SceneFunctions.SetSceneRadius(savedSceneRadius);
+
         if (hiddenPlanet != null)
         {
             hiddenPlanet.SetActive(true);
@@ -553,6 +569,11 @@ public class GalaxyPlanetEntry : MonoBehaviour
             scene.transform.position = savedAnchorPosition;
             savedAnchorValid = false;
             Debug.Log("[PlanetDiag] cleanup anchor restored to " + savedAnchorPosition + ".");
+        }
+
+        if (scene != null)
+        {
+            SceneFunctions.SetSceneRadius(savedSceneRadius);
         }
 
         if (hiddenPlanet != null)
@@ -637,7 +658,13 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
             GameObject deck = GameObject.CreatePrimitive(PrimitiveType.Plane);
             deck.name = "PlanetCloudShell_L" + i;
-            deck.transform.position = new Vector3(shipPosition.x, layerY, shipPosition.z);
+            Scene cloudScene = SceneFunctions.GetScene();
+            if (cloudScene != null)
+            {
+                deck.transform.SetParent(cloudScene.transform, true);
+            }
+            float shellAnchorY = cloudScene != null ? cloudScene.transform.position.y : 0f;
+            deck.transform.position = new Vector3(shipPosition.x, shellAnchorY + layerY, shipPosition.z);
             deck.transform.localScale = Vector3.one * 1600f;
             Collider deckCollider = deck.GetComponent<Collider>();
 
@@ -663,6 +690,19 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
         cloudDrift += Time.deltaTime * 2.5f;
 
+        float deckAnchorY = 0f;
+        float camY = shipPosition.y;
+        Scene deckSceneInit = SceneFunctions.GetScene();
+        if (deckSceneInit != null)
+        {
+            deckAnchorY = deckSceneInit.transform.position.y;
+
+            if (deckSceneInit.ogCamera != null && deckSceneInit.ogCamera.mainCamera != null)
+            {
+                camY = deckSceneInit.ogCamera.mainCamera.transform.position.y;
+            }
+        }
+
         for (int i = 0; i < cloudDeckGOs.Length; i++)
         {
             if (cloudDeckGOs[i] == null || cloudMats[i] == null)
@@ -673,9 +713,14 @@ public class GalaxyPlanetEntry : MonoBehaviour
             float layerT = CloudLayerCount == 1 ? 0.5f : (float)i / (CloudLayerCount - 1);
             float layerY = CloudDeckAltitude - CloudBandHalfThickness + layerT * CloudBandHalfThickness * 2f;
             float layerDrift = cloudDrift * (1f + layerT * 0.6f);
+            Scene deckScene = SceneFunctions.GetScene();
+            if (deckScene != null)
+            {
+                deckAnchorY = deckScene.transform.position.y;
+            }
             cloudDeckGOs[i].transform.position = new Vector3(
                 shipPosition.x + layerDrift,
-                layerY,
+                deckAnchorY + layerY,
                 shipPosition.z + layerDrift * 0.6f);
             Vector2 uvOffset = new Vector2(
                 i * 0.37f + layerDrift * 0.0004f,
@@ -683,17 +728,18 @@ public class GalaxyPlanetEntry : MonoBehaviour
             cloudMats[i].SetTextureOffset("_BaseMap", uvOffset);
             cloudMats[i].SetTextureOffset("_MainTex", uvOffset);
 
-            // Fade shells out as the camera approaches them: crossing the
-            // volume stays smooth instead of popping through quads.
-            float distToCam = Mathf.Abs(shipPosition.y - layerY);
+            // Fade shells out as the camera approaches them: the pop happens
+            // at the camera plane, not at the ship, so fade by camera height.
+            float distToCam = Mathf.Abs(camY - (deckAnchorY + layerY));
             float fade = Mathf.Clamp01(distToCam / CloudLayerFadeDistance);
             Color tint = cloudMats[i].color;
             tint.a = CloudLayerOpacity * fade;
             cloudMats[i].color = tint;
         }
 
-        // Dense haze while inside the volume: sells being wrapped in cloud.
-        float distToBand = Mathf.Abs(shipPosition.y - CloudDeckAltitude);
+        // Dense haze while the camera is inside the volume: sells being
+        // wrapped in cloud. Driven by camera height, not ship height.
+        float distToBand = Mathf.Abs(camY - (deckAnchorY + CloudDeckAltitude));
         float inside = Mathf.Clamp01(1f - distToBand / (CloudBandHalfThickness + 200f));
         float fogNear = Mathf.Lerp(800f, 60f, inside);
         float fogFar = Mathf.Lerp(7000f, 1800f, inside);

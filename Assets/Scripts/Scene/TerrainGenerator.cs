@@ -137,22 +137,28 @@ public class TerrainGenerator
 
     public Mesh GenerateMesh(Vector2Int tileCoordinate)
     {
+        return GenerateMesh(tileCoordinate, verticesPerSide);
+    }
+
+    public Mesh GenerateMesh(Vector2Int tileCoordinate, int vertsPerSide)
+    {
+        vertsPerSide = Mathf.Max(2, vertsPerSide);
         Mesh mesh = new Mesh();
         mesh.name = $"Terrain_Tile_{tileCoordinate.x}_{tileCoordinate.y}";
 
-        Vector3[] vertices = new Vector3[verticesPerSide * verticesPerSide];
-        Vector2[] uvs = new Vector2[verticesPerSide * verticesPerSide];
-        int[] triangles = new int[(verticesPerSide - 1) * (verticesPerSide - 1) * 6];
+        Vector3[] vertices = new Vector3[vertsPerSide * vertsPerSide];
+        Vector2[] uvs = new Vector2[vertsPerSide * vertsPerSide];
+        int[] triangles = new int[(vertsPerSide - 1) * (vertsPerSide - 1) * 6];
 
-        float step = tileSize / (verticesPerSide - 1);
+        float step = tileSize / (vertsPerSide - 1);
         float tileWorldX = tileCoordinate.x * tileSize;
         float tileWorldZ = tileCoordinate.y * tileSize;
 
         int vertexIndex = 0;
 
-        for (int z = 0; z < verticesPerSide; z++)
+        for (int z = 0; z < vertsPerSide; z++)
         {
-            for (int x = 0; x < verticesPerSide; x++)
+            for (int x = 0; x < vertsPerSide; x++)
             {
                 float worldX = tileWorldX + x * step;
                 float worldZ = tileWorldZ + z * step;
@@ -166,8 +172,8 @@ public class TerrainGenerator
                 );
 
                 uvs[vertexIndex] = new Vector2(
-                    x / (float)(verticesPerSide - 1),
-                    z / (float)(verticesPerSide - 1)
+                    x / (float)(vertsPerSide - 1),
+                    z / (float)(vertsPerSide - 1)
                 );
 
                 vertexIndex++;
@@ -176,13 +182,13 @@ public class TerrainGenerator
 
         int triangleIndex = 0;
 
-        for (int z = 0; z < verticesPerSide - 1; z++)
+        for (int z = 0; z < vertsPerSide - 1; z++)
         {
-            for (int x = 0; x < verticesPerSide - 1; x++)
+            for (int x = 0; x < vertsPerSide - 1; x++)
             {
-                int topLeft = z * verticesPerSide + x;
+                int topLeft = z * vertsPerSide + x;
                 int topRight = topLeft + 1;
-                int bottomLeft = topLeft + verticesPerSide;
+                int bottomLeft = topLeft + vertsPerSide;
                 int bottomRight = bottomLeft + 1;
 
                 triangles[triangleIndex++] = topLeft;

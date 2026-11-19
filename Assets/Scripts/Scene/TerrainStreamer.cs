@@ -15,6 +15,10 @@ public class TerrainStreamer : MonoBehaviour
     [Tooltip("The ship is surrounded by this many kilometres of tiles.")]
     [SerializeField] public float tileRadiusInKilometres = 30f;
 
+    [Tooltip("Cheap distant ring (low-res, no colliders) hiding the terrain edge.")]
+    [SerializeField] public float outerTileRadiusInKilometres = 30f;
+    [SerializeField] public int outerVerticesPerSide = 8;
+
     [Header("Materials")]
     [SerializeField] private Material terrainMaterial;
     [SerializeField] private Texture2D[] terrainTextures;
@@ -37,10 +41,12 @@ public class TerrainStreamer : MonoBehaviour
     public float mountAmp = 400f;
 
     private readonly Dictionary<Vector2Int, GameObject> loadedTiles = new();
+    private Material sharedOuterMaterial;
 
     private TerrainGenerator terrainGenerator;
     private Vector2Int currentShipTile;
     private int tileRadiusInTiles;
+    private int outerTileRadiusInTiles;
     private bool initialized;
 
     private void Start()
@@ -109,6 +115,27 @@ public class TerrainStreamer : MonoBehaviour
         tileRadiusInTiles = Mathf.CeilToInt(
             tileRadiusInKilometres * 1000f / tileSize
         );
+
+        outerTileRadiusInKilometres = Mathf.Max(outerTileRadiusInKilometres, tileRadiusInKilometres);
+        outerTileRadiusInTiles = Mathf.CeilToInt(
+            outerTileRadiusInKilometres * 1000f / tileSize
+        );
+
+        // One shared material for the whole distant ring (no per-tile cost).
+        // Must define ALL ground slots: the shader blends tile borders with
+        // the neighbor maps (default white) and missing slots show as streaks.
+        sharedOuterMaterial = new Material(terrainMaterial);
+        Texture2D outerGround = terrainTextures.Length > 0 ? terrainTextures[0] : null;
+        if (outerGround != null)
+        {
+            sharedOuterMaterial.SetTexture("_GroundMap", outerGround);
+            sharedOuterMaterial.SetTexture("_RightGroundMap", outerGround);
+            sharedOuterMaterial.SetTexture("_FrontGroundMap", outerGround);
+        }
+        if (cliffTexture != null)
+        {
+            sharedOuterMaterial.SetTexture("_CliffMap", cliffTexture);
+        }
 
         Vector3 shipLocalPosition = tileParent.InverseTransformPoint(ship.position);
         currentShipTile = LocalPositionToTileCoordinate(shipLocalPosition);
@@ -200,9 +227,9 @@ public class TerrainStreamer : MonoBehaviour
     {
         HashSet<Vector2Int> requiredTiles = new();
 
-        for (int z = -tileRadiusInTiles; z <= tileRadiusInTiles; z++)
+        for (int z = -outerTileRadiusInTiles; z <= outerTileRadiusInTiles; z++)
         {
-            for (int x = -tileRadiusInTiles; x <= tileRadiusInTiles; x++)
+            for (int x = -outerTileRadiusInTiles; x <= outerTileRadiusInTiles; x++)
             {
                 Vector2Int tileCoordinate = new Vector2Int(
                     currentShipTile.x + x,
@@ -213,7 +240,8 @@ public class TerrainStreamer : MonoBehaviour
 
                 if (!loadedTiles.ContainsKey(tileCoordinate))
                 {
-                    LoadTile(tileCoordinate);
+                    bool isOuter = Mathf.Abs(x) > tileRadiusInTiles || Mathf.Abs(z) > tileRadiusInTiles;
+                    LoadTile(tileCoordinate, isOuter);
                 }
             }
         }
@@ -234,9 +262,11 @@ public class TerrainStreamer : MonoBehaviour
         }
     }
 
-    private void LoadTile(Vector2Int coordinate)
+    private void LoadTile(Vector2Int coordinate, bool isOuter = false)
     {
-        Mesh mesh = terrainGenerator.GenerateMesh(coordinate);
+        Mesh mesh = isOuter
+            ? terrainGenerator.GenerateMesh(coordinate, outerVerticesPerSide)
+            : terrainGenerator.GenerateMesh(coordinate);
 
         GameObject tileObject = new GameObject($"Tile_{coordinate.x}_{coordinate.y}");
         tileObject.transform.SetParent(tileParent);
@@ -254,6 +284,14 @@ public class TerrainStreamer : MonoBehaviour
         meshFilter.mesh = mesh;
 
         MeshRenderer meshRenderer = tileObject.AddComponent<MeshRenderer>();
+
+        if (isOuter)
+        {
+            // Distant ring: shared material, no collider, no per-tile cost.
+            meshRenderer.sharedMaterial = sharedOuterMaterial;
+            loadedTiles.Add(coordinate, tileObject);
+            return;
+        }
 
         // Create a unique material instance
         Material materialInstance = new Material(terrainMaterial);
@@ -367,5 +405,11 @@ public class TerrainStreamer : MonoBehaviour
         }
 
         loadedTiles.Clear();
+
+        if (sharedOuterMaterial != null)
+        {
+            Destroy(sharedOuterMaterial);
+            sharedOuterMaterial = null;
+        }
     }
 }

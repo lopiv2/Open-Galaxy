@@ -38,8 +38,53 @@ public static class GalaxyModeFunctions
         "Dagobah",
         "Mon Calamari",
         "Wrea",
-        "Smuggler's Run"
+        "Smuggler's Run",
+        "Ryloth",
+        "Christophsis",
+        "Arkanis",
+        "Gorno",
+        "Dalchon",
+        "New Cov",
+        "Doldur",
+        "Druckenwell",
+        "Kabray",
+        "Algara",
+        "Andosha II",
+        "Mon Gazza",
+        "Herdessa",
+        "Radnor",
+        "Habassa",
+        "Andooweel",
+        "Kemal Station",
+        "New Ator",
+        "Issor"
     };
+
+    // Visual-only map offsets in galactic units (X = right, Y = down on screen).
+    // Canon coordinates in StarSystems.json are never touched. Offsets are a
+    // last resort, only for pairs so close that even max zoom cannot separate
+    // them (at min distance 8, ~17 units fill one dot width).
+    // Dense-but-separable chains (Triellus, Bespin/Hoth, Herdessa/Habassa)
+    // are meant to be read by zooming in, atlas style.
+    private static readonly Dictionary<string, Vector2> MapDisplayOffsets = new Dictionary<string, Vector2>
+    {
+        // Geonosis and Tatooine share almost the same canon position (~9 units):
+        // Geonosis renders to the right of Tatooine, at the same height.
+        { "Geonosis", new Vector2(300f, 0f) }
+    };
+
+    // Offset to add to a system's canon position when drawing the map.
+    public static Vector2 GetMapDisplayOffset(string planetName)
+    {
+        Vector2 offset;
+
+        if (!string.IsNullOrEmpty(planetName) && MapDisplayOffsets.TryGetValue(planetName, out offset))
+        {
+            return offset;
+        }
+
+        return Vector2.zero;
+    }
 
     // Ships with cockpit that the player can fly.
     public static List<ShipType> GetFlyableShips()
@@ -257,6 +302,7 @@ public static class GalaxyModeFunctions
         missionManagerGO.name = "MissionManager";
         MissionManager missionManager = missionManagerGO.AddComponent<MissionManager>();
         missionManagerGO.AddComponent<GalaxyMapController>();
+        missionManagerGO.AddComponent<GalaxyPlanetEntry>();
         missionManager.missionName = "Galaxy Mode - " + planetName;
         missionManager.missionAddress = OGGetAddress.missions_internal;
         missionManager.missionData = "{\"missionEventData\":[]}";

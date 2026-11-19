@@ -334,7 +334,7 @@ public class GalaxyMapController : MonoBehaviour
 
     public static void TravelToSystem(string planetName)
     {
-        if (previewMode || IsTraveling == true || string.IsNullOrEmpty(planetName))
+        if (previewMode || IsTraveling == true || GalaxyPlanetEntry.IsTransitioning == true || string.IsNullOrEmpty(planetName))
         {
             return;
         }
@@ -391,6 +391,13 @@ public class GalaxyMapController : MonoBehaviour
         }
 
         // Give the player a visible five-second notice before the regular hyperspace sequence.
+        // If the ship is on a planet surface, leave the atmosphere first so
+        // no terrain tiles are left behind (the jump repositions the ship).
+        if (GalaxyPlanetEntry.Instance != null)
+        {
+            yield return GalaxyPlanetEntry.Instance.ExitForHyperspace();
+        }
+
         ShowCountdown("HYPERSPACE JUMP TO " + destination.ToUpper());
 
         for (int seconds = 5; seconds > 0; seconds--)
@@ -1471,10 +1478,14 @@ public class GalaxyMapController : MonoBehaviour
 
         foreach (StarSystem s in systems)
         {
-            if (s.X < minX) minX = s.X;
-            if (s.X > maxX) maxX = s.X;
-            if (s.Y < minY) minY = s.Y;
-            if (s.Y > maxY) maxY = s.Y;
+            Vector2 mapOffset = GalaxyModeFunctions.GetMapDisplayOffset(s.Planet);
+            float sx = s.X + mapOffset.x;
+            float sy = s.Y + mapOffset.y;
+
+            if (sx < minX) minX = sx;
+            if (sx > maxX) maxX = sx;
+            if (sy < minY) minY = sy;
+            if (sy > maxY) maxY = sy;
         }
 
         float rangeX = Mathf.Max(1f, maxX - minX);
@@ -1502,8 +1513,9 @@ public class GalaxyMapController : MonoBehaviour
 
         foreach (StarSystem s in systems)
         {
-            float nx = (s.X - minX) / rangeX;
-            float ny = (s.Y - minY) / rangeY;
+            Vector2 mapOffset = GalaxyModeFunctions.GetMapDisplayOffset(s.Planet);
+            float nx = (s.X + mapOffset.x - minX) / rangeX;
+            float ny = (s.Y + mapOffset.y - minY) / rangeY;
 
             GameObject btnGO = new GameObject("Sys_" + s.Planet);
             btnGO.transform.SetParent(mapArea, false);

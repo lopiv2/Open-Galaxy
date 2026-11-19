@@ -9,11 +9,11 @@ public class TerrainStreamer : MonoBehaviour
     [Header("Tile Settings")]
     [SerializeField] private float tileSize = 1000f;
     [SerializeField] private int verticesPerSide = 32;
-    [SerializeField] private float maxTerrainHeight = 1000f;
+    [SerializeField] public float maxTerrainHeight = 1000f;
     [SerializeField] private AnimationCurve heightCurve = AnimationCurve.Linear(0, 0, 1, 1);
 
     [Tooltip("The ship is surrounded by this many kilometres of tiles.")]
-    [SerializeField] private float tileRadiusInKilometres = 30f;
+    [SerializeField] public float tileRadiusInKilometres = 30f;
 
     [Header("Materials")]
     [SerializeField] private Material terrainMaterial;

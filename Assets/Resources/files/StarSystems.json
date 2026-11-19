@@ -639,7 +639,8 @@
             "seed": 111,
             "SystemSunType": "normal",
             "planetType": "forest",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 6 }]
         },
         {
             "Planet": "Algarian",
@@ -1055,10 +1056,11 @@
             "seed": 7282,
             "SystemSunType": "normal",
             "planetType": "volcanic",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Triellus Trade Route", "order": 1 }]
         },
         {
-            "Planet": "Andosha",
+            "Planet": "Andosha II",
             "X": 7420.5498046875,
             "Y": -8933.580078125,
             "Z": 4524.767578125,
@@ -1071,7 +1073,8 @@
             "seed": 8084,
             "SystemSunType": "normal",
             "planetType": "desert",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 7 }]
         },
         {
             "Planet": "Anemcoro",
@@ -1743,7 +1746,8 @@
             "seed": 9039,
             "SystemSunType": "normal",
             "planetType": "water",
-            "faction": "unaligned"
+            "faction": "unaligned",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 13 }, { "route": "Triellus Trade Route", "order": 5 }]
         },
         {
             "Planet": "Arkuda",
@@ -5359,7 +5363,8 @@
             "seed": 3723,
             "SystemSunType": "normal",
             "planetType": "city",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 12 }]
         },
         {
             "Planet": "Chroma Zed",
@@ -6625,7 +6630,8 @@
             "seed": 1400,
             "SystemSunType": "normal",
             "planetType": "grasslands",
-            "faction": "independent"
+            "faction": "independent",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 15 }]
         },
         {
             "Planet": "Dalcretti",
@@ -7633,7 +7639,8 @@
             "seed": 8589,
             "SystemSunType": "normal",
             "planetType": "tropical",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 3 }]
         },
         {
             "Planet": "Dolis",
@@ -8145,7 +8152,8 @@
             "seed": 5139,
             "SystemSunType": "normal",
             "planetType": "forest",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 4 }]
         },
         {
             "Planet": "Du Hutta",
@@ -10801,7 +10809,8 @@
             "seed": 2961,
             "SystemSunType": "normal",
             "planetType": "desert",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 14 }]
         },
         {
             "Planet": "Goroth",
@@ -11105,7 +11114,8 @@
             "seed": 8460,
             "SystemSunType": "normal",
             "planetType": "volcanic",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 10 }]
         },
         {
             "Planet": "Had Abbadon",
@@ -11441,7 +11451,8 @@
             "seed": 8061,
             "SystemSunType": "normal",
             "planetType": "water",
-            "faction": "corporatesector"
+            "faction": "corporatesector",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 9 }]
         },
         {
             "Planet": "Herzob",
@@ -12609,7 +12620,8 @@
             "seed": 3030,
             "SystemSunType": "normal",
             "planetType": "forest",
-            "faction": "independent"
+            "faction": "independent",
+            "hyperrouteStops": [{ "route": "Triellus Trade Route", "order": 4 }]
         },
         {
             "Planet": "Itani",
@@ -13393,7 +13405,8 @@
             "seed": 3316,
             "SystemSunType": "normal",
             "planetType": "desert",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 5 }]
         },
         {
             "Planet": "Kadavo",
@@ -14129,7 +14142,8 @@
             "seed": 6221,
             "SystemSunType": "normal",
             "planetType": "tropical",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Triellus Trade Route", "order": 2 }]
         },
         {
             "Planet": "Kerkoidia",
@@ -18033,7 +18047,8 @@
             "seed": 8905,
             "SystemSunType": "normal",
             "planetType": "forest",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 8 }]
         },
         {
             "Planet": "Monastery",
@@ -19185,7 +19200,8 @@
             "seed": 862,
             "SystemSunType": "normal",
             "planetType": "barren",
-            "faction": "independent"
+            "faction": "independent",
+            "hyperrouteStops": [{ "route": "Triellus Trade Route", "order": 3 }]
         },
         {
             "Planet": "New Bakstre",
@@ -19233,7 +19249,8 @@
             "seed": 7864,
             "SystemSunType": "normal",
             "planetType": "ice",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 2 }]
         },
         {
             "Planet": "New Cylimba",
@@ -24657,7 +24674,8 @@
             "seed": 4330,
             "SystemSunType": "normal",
             "planetType": "forest",
-            "faction": "imperial"
+            "faction": "imperial",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 11 }]
         },
         {
             "Planet": "Rafa",
@@ -26113,7 +26131,8 @@
             "seed": 9345,
             "SystemSunType": "normal",
             "planetType": "ice",
-            "faction": "rebel"
+            "faction": "rebel",
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 16 }]
         },
         {
             "Planet": "Ryndellia",
@@ -26645,13 +26664,13 @@
         },
         {
             "Planet": "Scarif",
-            "X": 8712.509765625,
-            "Y": -10197.4404296875,
+            "X": 11300.0,
+            "Y": -7600.0,
             "Z": 80.103759765625,
             "sectorRadius": 231.780517578125,
             "Region": "Outer Rim",
-            "Sector": "Savareen Sector",
-            "Grid": "Q17",
+            "Sector": "Abrion Sector",
+            "Grid": "S15",
             "System": "Scarif System",
             "SystemNumber": 2,
             "seed": 6661,
@@ -27906,7 +27925,7 @@
             "SystemSunType": "normal",
             "planetType": "ice",
             "faction": "independent",
-            "hyperrouteStops": [{ "route": "Corellian Run", "order": 3 }]
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 18 }]
         },
         {
             "Planet": "Sneeve",
@@ -29173,6 +29192,7 @@
             "planetPrefab": "tatooine",
             "faction": "independent",
             "planetDistance": 50.0,
+            "hyperrouteStops": [{ "route": "Triellus Trade Route", "order": 0 }],
             "suns": [
                 {
                     "sunType": "normal",
@@ -33155,7 +33175,7 @@
             "SystemSunType": "normal",
             "planetType": "volcanic",
             "faction": "independent",
-            "hyperrouteStops": [{ "route": "Corellian Run", "order": 2 }]
+            "hyperrouteStops": [{ "route": "Corellian Run", "order": 17 }]
         },
         {
             "Planet": "Wroona",

@@ -62,8 +62,35 @@ public static class GalaxyRoutes
     {
         "Coruscant",
         "Corellia",
+        "New Cov",
+        "Doldur",
+        "Druckenwell",
+        "Kabray",
+        "Algara",
+        "Andosha II",
+        "Mon Gazza",
+        "Herdessa",
+        "Habassa",
+        "Radnor",
+        "Christophsis",
+        "Arkanis",
+        "Gorno",
+        "Dalchon",
+        "Ryloth",
         "Wrea",
         "Smuggler's Run"
+    };
+
+    // Fallback when the JSON has no stops (keeps the map functional).
+    // Triellus Trade Route: Tatooine to Arkanis, where it meets the Corellian Run.
+    private static readonly string[] FallbackTriellusStops = new string[]
+    {
+        "Tatooine",
+        "Andooweel",
+        "Kemal Station",
+        "New Ator",
+        "Issor",
+        "Arkanis"
     };
 
     private static List<Hyperroute> cachedRoutes;
@@ -120,10 +147,15 @@ public static class GalaxyRoutes
 
         // NOTE: only map-supported stops are in the JSON for now. As more
         // StartPlanets systems are added, insert their canonical intermediate
-        // stops between Corellia and Wrea keeping the [..., Wrea, Smuggler's Run] tail.
+        // stops in order, keeping the [..., Wrea, Smuggler's Run] tail.
         if (GetRouteInternal("Corellian Run") == null)
         {
             cachedRoutes.Add(new Hyperroute("Corellian Run", FallbackCorellianRunStops));
+        }
+
+        if (GetRouteInternal("Triellus Trade Route") == null)
+        {
+            cachedRoutes.Add(new Hyperroute("Triellus Trade Route", FallbackTriellusStops));
         }
     }
 
@@ -238,7 +270,7 @@ public static class GalaxyRoutes
     }
 
     // Direct hyperspace neighbours of a system along any known route.
-    // For Smuggler's Run this returns ["Wrea"]; for Wrea, ["Corellia", "Smuggler's Run"].
+    // For Smuggler's Run this returns ["Wrea"]; for Ryloth, ["Dalchon", "Wrea"].
     public static List<string> GetConnectedSystems(string planetName)
     {
         EnsureLoaded();

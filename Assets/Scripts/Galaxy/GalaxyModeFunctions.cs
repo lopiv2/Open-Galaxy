@@ -461,7 +461,7 @@ public static class GalaxyModeFunctions
         return string.Join(" ", parts);
     }
 
-    private static string GetAllegianceForShip(string shipType)
+    public static string GetAllegianceForShip(string shipType)
     {
         TextAsset shipTypesFile = Resources.Load(OGGetAddress.files + "ShipTypes") as TextAsset;
 

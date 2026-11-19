@@ -2427,8 +2427,21 @@ public static class SceneFunctions
             {
                 Vector3 cameraPosition = oGCamera.mainCamera.transform.position; //This checks the ships position
 
+                // Planet flight resets the anchor on entry and keeps everything
+                // near the origin, so skip recentering below 50 km to avoid
+                // snapping the ship mid-flight. Beyond that it still fires as
+                // a safety net against float-precision degradation.
+                if ((GalaxyPlanetEntry.IsOnPlanet || GalaxyPlanetEntry.IsTransitioning)
+                    && Mathf.Abs(cameraPosition.x) < 50000f
+                    && Mathf.Abs(cameraPosition.y) < 50000f
+                    && Mathf.Abs(cameraPosition.z) < 50000f)
+                {
+                    return;
+                }
+
                 if (cameraPosition.x > 1000 || cameraPosition.x < -1000 || cameraPosition.y > 1000 || cameraPosition.y < -1000 || cameraPosition.z > 1000 || cameraPosition.z < -1000)
                 {
+                    Debug.Log("[PlanetDiag] RecenterScene fired: camera=" + cameraPosition);
                     GameObject tempGO = new GameObject();
 
                     tempGO.transform.position = oGCamera.mainCamera.transform.position;

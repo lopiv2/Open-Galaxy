@@ -34,6 +34,22 @@
     },
     {
       "ParentMenu": "none",
+      "Name": "Tools",
+      "Description": "none",
+      "Function": "ActivateSubMenu",
+      "Type": "LeftBarButton_Editor",
+      "Variable": "Tools"
+    },
+    {
+      "ParentMenu": "Tools",
+      "Name": "Test A-Wing en Tatooine (planeta)",
+      "Description": "Directo a Tatooine con A-Wing, sin mapa ni vuelo previo",
+      "Function": "TestAwingTatooine",
+      "Type": "ContentButton01",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "none",
       "Name": "Credits",
       "Description": "none",
       "Function": "ActivateSubMenu",

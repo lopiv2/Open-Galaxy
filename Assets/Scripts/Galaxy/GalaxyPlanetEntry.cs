@@ -24,8 +24,11 @@ public class GalaxyPlanetEntry : MonoBehaviour
     private EntryState state = EntryState.InSpace;
     private GameObject terrainGO;
     private TerrainStreamer streamer;
-    private GameObject cloudDeckGO;
-    private Material cloudMaterial;
+    // Volumetric-look cloud band: stacked translucent shells around
+    // CloudDeckAltitude, each with decorrelated noise so the stack reads as
+    // a 3D volume instead of a flat sheet. Shells follow the ship in XZ.
+    private GameObject[] cloudDeckGOs;
+    private Material[] cloudMats;
     private float cloudDrift;
     private static Texture2D cloudTexture;
     private GameObject fadeCanvasGO;
@@ -47,9 +50,22 @@ public class GalaxyPlanetEntry : MonoBehaviour
     // Cloud deck: the ship spawns above it and descends through on entry.
     private const float CloudDeckAltitude = 1400f;
     private const float EntryAltitudeAboveClouds = 800f;
+    // Cloud volume shape.
+    private const int CloudLayerCount = 8;
+    private const float CloudBandHalfThickness = 200f;
+    private const float CloudLayerFadeDistance = 150f;
+    private const float CloudLayerOpacity = 0.34f;
     private const float EntryFadeColorR = 0.96f;
     private const float EntryFadeColorG = 0.85f;
     private const float EntryFadeColorB = 0.66f;
+
+    // Floating-origin freeze for planet flight (plan B): the scene anchor is
+    // reset to zero on entry and restored on exit, so RecenterScene never
+    // fires mid-flight. Suspended below 50 km in SceneFunctions instead.
+    private Vector3 savedAnchorPosition = Vector3.zero;
+    private bool savedAnchorValid = false;
+    private float planetLogTimer = 0f;
+    private const float PlanetLogInterval = 1f;
 
     void Awake()
     {
@@ -223,6 +239,39 @@ public class GalaxyPlanetEntry : MonoBehaviour
         StartCoroutine(EnterAtmosphereRoutine(scene));
     }
 
+    // Test hook: entra directo sin comprobar distancia (para la herramienta de prueba).
+    public void ForceEnterForTest()
+    {
+        if (state != EntryState.InSpace || IsTransitioning)
+        {
+            return;
+        }
+
+        Scene scene = SceneFunctions.GetScene();
+
+        if (scene == null || scene.mainShip == null || string.IsNullOrEmpty(scene.currentLocation))
+        {
+            return;
+        }
+
+        if (!IsSupported(scene.currentLocation))
+        {
+            return;
+        }
+
+        if (GetActivePlanet(scene, out GameObject planet, out Vector3 center, out float radius) == false)
+        {
+            return;
+        }
+
+        hiddenPlanet = planet;
+        planetCenter = center;
+        planetRadius = radius;
+        cachedLocation = scene.currentLocation;
+        returnPosition = scene.mainShip.transform.position;
+        StartCoroutine(EnterAtmosphereRoutine(scene));
+    }
+
     private IEnumerator EnterAtmosphereRoutine(Scene scene)
     {
         state = EntryState.Entering;
@@ -254,19 +303,35 @@ public class GalaxyPlanetEntry : MonoBehaviour
             hiddenPlanet.SetActive(false);
         }
 
+        // Freeze the floating origin for planet flight: reset the scene anchor
+        // once (ship/terrain/clouds are rebuilt around the origin below), so
+        // RecenterScene can't snap the ship mid-flight. Restored on exit.
+        savedAnchorPosition = scene.transform.position;
+        savedAnchorValid = true;
+        scene.transform.position = Vector3.zero;
+        Debug.Log("[PlanetDiag] entry anchor was " + savedAnchorPosition + ", reset to zero.");
+
         // Desert day sky + sandy haze. The binary suns stay where they are
         // (their flares still glow through the haze from the ground).
-        TrySetSkybox("loworbit_desert01", "sky_clouds01");
+        TrySetSkybox("loworbit_desert_png01", "loworbit_desert01", "sky_clouds01");
         SceneFunctions.SetFogDistanceAndColor(800f, 7000f, "#D9B98C");
 
         SpawnTerrain(scene);
         SpawnCloudDeck(mainShip.transform.position);
 
+        // Let TerrainStreamer build tiles and physics cook their colliders
+        // before sampling the ground below the spawn point.
+        yield return null;
+        yield return new WaitForFixedUpdate();
+
         float entryAltitude = CloudDeckAltitude + EntryAltitudeAboveClouds;
         Vector3 shipPos = mainShip.transform.position;
         float groundAtSpawn = SampleGroundHeight(new Vector3(shipPos.x, entryAltitude + 1000f, shipPos.z));
-        float safeAltitude = Mathf.Max(entryAltitude, groundAtSpawn + EntryAltitudeMargin);
+        float safeAltitude = float.IsNaN(groundAtSpawn)
+            ? entryAltitude
+            : Mathf.Max(entryAltitude, groundAtSpawn + EntryAltitudeMargin);
         mainShip.transform.position = new Vector3(shipPos.x, safeAltitude, shipPos.z);
+        Debug.Log("[PlanetDiag] spawned at " + mainShip.transform.position + " (ground " + groundAtSpawn + ").");
 
         yield return FadeTo(new Color(EntryFadeColorR, EntryFadeColorG, EntryFadeColorB, 0f), 0.8f);
 
@@ -319,9 +384,33 @@ public class GalaxyPlanetEntry : MonoBehaviour
         UpdateCloudDeck(scene.mainShip.transform.position);
 
         float groundHeight = SampleGroundHeight(scene.mainShip.transform.position);
-        float agl = scene.mainShip.transform.position.y - groundHeight;
+        // No tile below (flying high): treat as infinite clearance so the
+        // MinClearance clamp below can't push the ship upward.
+        float agl = float.IsNaN(groundHeight) ? float.PositiveInfinity : scene.mainShip.transform.position.y - groundHeight;
 
-        if (agl < MinClearance)
+        planetLogTimer += Time.deltaTime;
+
+        if (planetLogTimer >= PlanetLogInterval)
+        {
+            planetLogTimer = 0f;
+            Vector3 anchorPos = scene.transform.position;
+            float distToCenter = Vector3.Distance(scene.mainShip.transform.position, anchorPos);
+            string camY = "n/a";
+
+            if (scene.ogCamera != null && scene.ogCamera.mainCamera != null)
+            {
+                camY = scene.ogCamera.mainCamera.transform.position.y.ToString("F1");
+            }
+
+            Debug.Log("[PlanetDiag] shipY=" + scene.mainShip.transform.position.y.ToString("F1")
+                + " groundY=" + groundHeight.ToString("F1")
+                + " agl=" + agl.ToString("F1")
+                + " anchorY=" + anchorPos.y.ToString("F1")
+                + " camY=" + camY
+                + " distToCenter=" + distToCenter.ToString("F1"));
+        }
+
+        if (float.IsNaN(groundHeight) == false && agl < MinClearance)
         {
             Vector3 shipPos = scene.mainShip.transform.position;
             shipPos.y = groundHeight + MinClearance;
@@ -350,7 +439,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         }
 
         float groundHeight = SampleGroundHeight(scene.mainShip.transform.position);
-        float agl = scene.mainShip.transform.position.y - groundHeight;
+        float agl = float.IsNaN(groundHeight) ? float.PositiveInfinity : scene.mainShip.transform.position.y - groundHeight;
 
         if (agl < ExitCeilingAGL)
         {
@@ -407,6 +496,13 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
         DestroyTerrain();
 
+        if (savedAnchorValid)
+        {
+            scene.transform.position = savedAnchorPosition;
+            savedAnchorValid = false;
+            Debug.Log("[PlanetDiag] exit anchor restored to " + savedAnchorPosition + ".");
+        }
+
         if (hiddenPlanet != null)
         {
             hiddenPlanet.SetActive(true);
@@ -450,6 +546,15 @@ public class GalaxyPlanetEntry : MonoBehaviour
     {
         DestroyTerrain();
 
+        Scene scene = SceneFunctions.GetScene();
+
+        if (scene != null && savedAnchorValid)
+        {
+            scene.transform.position = savedAnchorPosition;
+            savedAnchorValid = false;
+            Debug.Log("[PlanetDiag] cleanup anchor restored to " + savedAnchorPosition + ".");
+        }
+
         if (hiddenPlanet != null)
         {
             hiddenPlanet.SetActive(true);
@@ -483,9 +588,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
         DestroyCloudDeck();
     }
 
-    // Single translucent cloud deck the ship descends through on entry.
-    // Procedural FBM texture (no asset plumbing), double-sided so it reads
-    // from above and below, slowly drifting with the ship.
+    // Stacked translucent shells forming a cloud volume. Each shell uses the
+    // same procedural FBM texture but different tiling, UV offset and drift,
+    // so the stack reads as 3D noise instead of a repeated sheet. Shells near
+    // the camera fade out to avoid a hard pop when crossing them.
     private void SpawnCloudDeck(Vector3 shipPosition)
     {
         DestroyCloudDeck();
@@ -497,69 +603,129 @@ public class GalaxyPlanetEntry : MonoBehaviour
             unlit = Shader.Find("Unlit/Color");
         }
 
-        cloudMaterial = new Material(unlit);
-        cloudMaterial.mainTexture = GetCloudTexture();
-        cloudMaterial.SetTexture("_BaseMap", GetCloudTexture());
-        cloudMaterial.SetTexture("_MainTex", GetCloudTexture());
-        cloudMaterial.SetTextureScale("_BaseMap", new Vector2(5f, 5f));
-        cloudMaterial.SetTextureScale("_MainTex", new Vector2(5f, 5f));
-        cloudMaterial.color = new Color(1f, 0.98f, 0.95f, 1f);
-        cloudMaterial.SetFloat("_Surface", 1f);
-        cloudMaterial.SetFloat("_Blend", 0f);
-        cloudMaterial.SetOverrideTag("RenderType", "Transparent");
-        cloudMaterial.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
-        cloudMaterial.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-        cloudMaterial.SetInt("_ZWrite", 0);
-        cloudMaterial.SetFloat("_Cull", 0f);
-        cloudMaterial.DisableKeyword("_ALPHATEST_ON");
-        cloudMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-        cloudMaterial.renderQueue = (int)RenderQueue.Transparent;
+        cloudDeckGOs = new GameObject[CloudLayerCount];
+        cloudMats = new Material[CloudLayerCount];
 
-        cloudDeckGO = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        cloudDeckGO.name = "PlanetCloudDeck";
-        cloudDeckGO.transform.position = new Vector3(shipPosition.x, CloudDeckAltitude, shipPosition.z);
-        cloudDeckGO.transform.localScale = Vector3.one * 1200f;
-        Collider deckCollider = cloudDeckGO.GetComponent<Collider>();
-
-        if (deckCollider != null)
+        for (int i = 0; i < CloudLayerCount; i++)
         {
-            GameObject.Destroy(deckCollider);
+            float layerT = CloudLayerCount == 1 ? 0.5f : (float)i / (CloudLayerCount - 1);
+            float layerY = CloudDeckAltitude - CloudBandHalfThickness + layerT * CloudBandHalfThickness * 2f;
+            float tiling = 10f - layerT * 5f;
+
+            Material mat = new Material(unlit);
+            mat.mainTexture = GetCloudTexture();
+            mat.SetTexture("_BaseMap", GetCloudTexture());
+            mat.SetTexture("_MainTex", GetCloudTexture());
+            mat.SetTextureScale("_BaseMap", new Vector2(tiling, tiling));
+            mat.SetTextureScale("_MainTex", new Vector2(tiling, tiling));
+            // Decorrelate the noise pattern between shells.
+            Vector2 seedOffset = new Vector2(i * 0.37f, i * 0.61f);
+            mat.SetTextureOffset("_BaseMap", seedOffset);
+            mat.SetTextureOffset("_MainTex", seedOffset);
+            mat.color = new Color(1f, 0.98f, 0.95f, CloudLayerOpacity);
+            mat.SetFloat("_Surface", 1f);
+            mat.SetFloat("_Blend", 0f);
+            mat.SetOverrideTag("RenderType", "Transparent");
+            mat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+            mat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+            mat.SetInt("_ZWrite", 0);
+            mat.SetFloat("_Cull", 0f);
+            mat.DisableKeyword("_ALPHATEST_ON");
+            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            mat.renderQueue = (int)RenderQueue.Transparent;
+            cloudMats[i] = mat;
+
+            GameObject deck = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            deck.name = "PlanetCloudShell_L" + i;
+            deck.transform.position = new Vector3(shipPosition.x, layerY, shipPosition.z);
+            deck.transform.localScale = Vector3.one * 1600f;
+            Collider deckCollider = deck.GetComponent<Collider>();
+
+            if (deckCollider != null)
+            {
+                GameObject.Destroy(deckCollider);
+            }
+
+            Renderer deckRenderer = deck.GetComponent<Renderer>();
+            deckRenderer.sharedMaterial = mat;
+            cloudDeckGOs[i] = deck;
         }
 
-        Renderer deckRenderer = cloudDeckGO.GetComponent<Renderer>();
-        deckRenderer.sharedMaterial = cloudMaterial;
         cloudDrift = 0f;
     }
 
     private void UpdateCloudDeck(Vector3 shipPosition)
     {
-        if (cloudDeckGO == null || cloudMaterial == null)
+        if (cloudDeckGOs == null || cloudMats == null)
         {
             return;
         }
 
         cloudDrift += Time.deltaTime * 2.5f;
-        cloudDeckGO.transform.position = new Vector3(
-            shipPosition.x + cloudDrift,
-            CloudDeckAltitude,
-            shipPosition.z + cloudDrift * 0.6f);
-        Vector2 uvOffset = new Vector2(cloudDrift * 0.0004f, cloudDrift * 0.00025f);
-        cloudMaterial.SetTextureOffset("_BaseMap", uvOffset);
-        cloudMaterial.SetTextureOffset("_MainTex", uvOffset);
+
+        for (int i = 0; i < cloudDeckGOs.Length; i++)
+        {
+            if (cloudDeckGOs[i] == null || cloudMats[i] == null)
+            {
+                continue;
+            }
+
+            float layerT = CloudLayerCount == 1 ? 0.5f : (float)i / (CloudLayerCount - 1);
+            float layerY = CloudDeckAltitude - CloudBandHalfThickness + layerT * CloudBandHalfThickness * 2f;
+            float layerDrift = cloudDrift * (1f + layerT * 0.6f);
+            cloudDeckGOs[i].transform.position = new Vector3(
+                shipPosition.x + layerDrift,
+                layerY,
+                shipPosition.z + layerDrift * 0.6f);
+            Vector2 uvOffset = new Vector2(
+                i * 0.37f + layerDrift * 0.0004f,
+                i * 0.61f + layerDrift * 0.00025f);
+            cloudMats[i].SetTextureOffset("_BaseMap", uvOffset);
+            cloudMats[i].SetTextureOffset("_MainTex", uvOffset);
+
+            // Fade shells out as the camera approaches them: crossing the
+            // volume stays smooth instead of popping through quads.
+            float distToCam = Mathf.Abs(shipPosition.y - layerY);
+            float fade = Mathf.Clamp01(distToCam / CloudLayerFadeDistance);
+            Color tint = cloudMats[i].color;
+            tint.a = CloudLayerOpacity * fade;
+            cloudMats[i].color = tint;
+        }
+
+        // Dense haze while inside the volume: sells being wrapped in cloud.
+        float distToBand = Mathf.Abs(shipPosition.y - CloudDeckAltitude);
+        float inside = Mathf.Clamp01(1f - distToBand / (CloudBandHalfThickness + 200f));
+        float fogNear = Mathf.Lerp(800f, 60f, inside);
+        float fogFar = Mathf.Lerp(7000f, 1800f, inside);
+        SceneFunctions.SetFogDistanceAndColor(fogNear, fogFar, "#D9B98C");
     }
 
     private void DestroyCloudDeck()
     {
-        if (cloudDeckGO != null)
+        if (cloudDeckGOs != null)
         {
-            GameObject.Destroy(cloudDeckGO);
-            cloudDeckGO = null;
+            foreach (GameObject deck in cloudDeckGOs)
+            {
+                if (deck != null)
+                {
+                    GameObject.Destroy(deck);
+                }
+            }
+
+            cloudDeckGOs = null;
         }
 
-        if (cloudMaterial != null)
+        if (cloudMats != null)
         {
-            GameObject.Destroy(cloudMaterial);
-            cloudMaterial = null;
+            foreach (Material mat in cloudMats)
+            {
+                if (mat != null)
+                {
+                    GameObject.Destroy(mat);
+                }
+            }
+
+            cloudMats = null;
         }
     }
 
@@ -618,11 +784,16 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
     // Only terrain tiles count ("Tile_x_z"): the ray starts above the ship
     // and could otherwise hit the ship itself or nearby traffic.
+    // Returns NaN when no tile is below (ship too high or tiles not ready):
+    // callers must NOT treat that as ground level, or the MinClearance
+    // clamp feeds back into a runaway climb.
     private float SampleGroundHeight(Vector3 shipPosition)
     {
         RaycastHit[] hits;
         Vector3 origin = new Vector3(shipPosition.x, shipPosition.y + 400f, shipPosition.z);
-        hits = Physics.RaycastAll(origin, Vector3.down, 2000f, 1 << 0);
+        // Long enough to reach the terrain (~0-250) from entry altitude.
+        float rayLength = origin.y + 1000f;
+        hits = Physics.RaycastAll(origin, Vector3.down, rayLength, 1 << 0);
 
         float bestHeight = float.NegativeInfinity;
 
@@ -641,7 +812,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
         if (float.IsNegativeInfinity(bestHeight))
         {
-            return shipPosition.y;
+            return float.NaN;
         }
 
         return bestHeight;
@@ -766,7 +937,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         return 1138;
     }
 
-    private static void TrySetSkybox(string primary, string fallback)
+    private static void TrySetSkybox(params string[] names)
     {
         Scene scene = SceneFunctions.GetScene();
 
@@ -775,7 +946,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
             return;
         }
 
-        foreach (string name in new string[] { primary, fallback })
+        foreach (string name in names)
         {
             foreach (Material skybox in scene.skyboxes)
             {
@@ -787,7 +958,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
             }
         }
 
-        Debug.LogWarning("[PlanetEntry] Neither skybox found: " + primary + " / " + fallback);
+        Debug.LogWarning("[PlanetEntry] None of the skyboxes found: " + string.Join(" / ", names));
     }
 
     private IEnumerator FadeTo(Color target, float duration)

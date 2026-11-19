@@ -296,6 +296,7 @@ public static class MainMenuFunctions
         mainMenu.functions.Add("SelectGalaxyFaction", new System.Action<string>(GalaxyModeFunctions.SelectGalaxyFaction));
         mainMenu.functions.Add("SelectGalaxyLaser", new System.Action<string>(GalaxyModeFunctions.SelectGalaxyLaser));
         mainMenu.functions.Add("StartGalaxyMode", new System.Action<string>(GalaxyModeFunctions.StartGalaxyMode));
+        mainMenu.functions.Add("TestAwingTatooine", new System.Action(GalaxyPlanetTestTool.TestAwingTatooine));
         mainMenu.functions.Add("ChangeDefaultCameraPosition", new System.Action<string>(ChangeDefaultCameraPosition));
         mainMenu.functions.Add("ChangeResolution", new System.Action<string>(ChangeResolution));
         mainMenu.functions.Add("ChangeDamageLevel", new System.Action<string>(ChangeDamageLevel));

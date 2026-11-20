@@ -4,7 +4,7 @@
             "type": "Sandcrawler",
             "displayName": "Sandcrawler",
             "prefab": "Sandcrawler",
-            "targetLength": 37.0
+            "targetLength": 40.0
         }
     ]
 }

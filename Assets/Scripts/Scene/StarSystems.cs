@@ -17,6 +17,15 @@ public class StarSystem
     public string SystemSunType;
     public string planetType;
     public string planetPrefab;
+    // Optional per-planet cloud roof override (StarSystems.json). Zero/empty
+    // means "use the PlanetTypes.json climate defaults for planetType".
+    public float cloudCoverage;
+    public float cloudOpacity;
+    public string cloudTint;
+    public float cloudAltitude;
+    public float cloudThickness;
+    public int cloudPuffs;
+    public float cloudWhiteout;
     public string faction;
     public float planetDistance;
     public List<StarSystemSun> suns;

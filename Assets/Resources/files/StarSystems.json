@@ -29192,6 +29192,13 @@
             "planetPrefab": "tatooine",
             "faction": "independent",
             "planetDistance": 50.0,
+            "cloudCoverage": 0.32,
+            "cloudOpacity": 0.34,
+            "cloudTint": "#FFF8F0",
+            "cloudAltitude": 1400.0,
+            "cloudThickness": 400.0,
+            "cloudPuffs": 24,
+            "cloudWhiteout": 0.5,
             "hyperrouteStops": [{ "route": "Triellus Trade Route", "order": 0 }],
             "suns": [
                 {

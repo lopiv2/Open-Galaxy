@@ -995,51 +995,88 @@ public class GalaxyPlanetEntry : MonoBehaviour
             whiteout = 0.5f
         };
 
-        string planetType = GetPlanetTypeName(planetName);
+        StarSystem system = GetStarSystem(planetName);
+        string planetType = system != null ? system.planetType : null;
         PlanetType def = GetPlanetTypeDef(planetType);
 
-        if (def == null)
-        {
-            return fallback;
-        }
-
         CloudProfile profile = fallback;
-        if (def.cloudCoverage > 0f)
+        if (def != null)
         {
-            profile.coverage = Mathf.Clamp01(def.cloudCoverage);
-        }
-        if (def.cloudOpacity > 0f)
-        {
-            profile.opacity = Mathf.Clamp01(def.cloudOpacity);
-        }
-        if (string.IsNullOrEmpty(def.cloudTint) == false)
-        {
-            Color tint;
-            if (ColorUtility.TryParseHtmlString(def.cloudTint, out tint))
+            if (def.cloudCoverage > 0f)
             {
-                profile.tint = tint;
+                profile.coverage = Mathf.Clamp01(def.cloudCoverage);
+            }
+            if (def.cloudOpacity > 0f)
+            {
+                profile.opacity = Mathf.Clamp01(def.cloudOpacity);
+            }
+            if (string.IsNullOrEmpty(def.cloudTint) == false)
+            {
+                Color tint;
+                if (ColorUtility.TryParseHtmlString(def.cloudTint, out tint))
+                {
+                    profile.tint = tint;
+                }
+            }
+            if (def.cloudAltitude > 0f)
+            {
+                profile.altitude = def.cloudAltitude;
+            }
+            if (def.cloudThickness > 0f)
+            {
+                profile.thickness = def.cloudThickness;
+            }
+            if (def.cloudPuffs > 0)
+            {
+                profile.puffs = Mathf.Clamp(def.cloudPuffs, 0, 80);
+            }
+            if (def.cloudWhiteout > 0f)
+            {
+                profile.whiteout = Mathf.Clamp01(def.cloudWhiteout);
             }
         }
-        if (def.cloudAltitude > 0f)
+
+        // Per-planet override wins over the climate defaults: set any of
+        // these in StarSystems.json to tune a single planet (e.g. Tatooine).
+        if (system != null)
         {
-            profile.altitude = def.cloudAltitude;
-        }
-        if (def.cloudThickness > 0f)
-        {
-            profile.thickness = def.cloudThickness;
-        }
-        if (def.cloudPuffs > 0)
-        {
-            profile.puffs = Mathf.Clamp(def.cloudPuffs, 0, 80);
-        }
-        if (def.cloudWhiteout > 0f)
-        {
-            profile.whiteout = Mathf.Clamp01(def.cloudWhiteout);
+            if (system.cloudCoverage > 0f)
+            {
+                profile.coverage = Mathf.Clamp01(system.cloudCoverage);
+            }
+            if (system.cloudOpacity > 0f)
+            {
+                profile.opacity = Mathf.Clamp01(system.cloudOpacity);
+            }
+            if (string.IsNullOrEmpty(system.cloudTint) == false)
+            {
+                Color tint;
+                if (ColorUtility.TryParseHtmlString(system.cloudTint, out tint))
+                {
+                    profile.tint = tint;
+                }
+            }
+            if (system.cloudAltitude > 0f)
+            {
+                profile.altitude = system.cloudAltitude;
+            }
+            if (system.cloudThickness > 0f)
+            {
+                profile.thickness = system.cloudThickness;
+            }
+            if (system.cloudPuffs > 0)
+            {
+                profile.puffs = Mathf.Clamp(system.cloudPuffs, 0, 80);
+            }
+            if (system.cloudWhiteout > 0f)
+            {
+                profile.whiteout = Mathf.Clamp01(system.cloudWhiteout);
+            }
         }
         return profile;
     }
 
-    private static string GetPlanetTypeName(string planetName)
+    private static StarSystem GetStarSystem(string planetName)
     {
         TextAsset starSystemFile = Resources.Load(OGGetAddress.files + "StarSystems") as TextAsset;
 
@@ -1049,17 +1086,23 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
             if (starSystems != null && starSystems.starSystemsData != null)
             {
-                foreach (StarSystem system in starSystems.starSystemsData)
+                foreach (StarSystem candidate in starSystems.starSystemsData)
                 {
-                    if (system != null && system.Planet == planetName)
+                    if (candidate != null && candidate.Planet == planetName)
                     {
-                        return system.planetType;
+                        return candidate;
                     }
                 }
             }
         }
 
         return null;
+    }
+
+    private static string GetPlanetTypeName(string planetName)
+    {
+        StarSystem system = GetStarSystem(planetName);
+        return system != null ? system.planetType : null;
     }
 
     private static PlanetType GetPlanetTypeDef(string planetType)

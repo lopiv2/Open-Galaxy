@@ -36,6 +36,14 @@ public class GalaxyPlanetEntry : MonoBehaviour
     private Material cloudPuffMat;
     private Vector3[] cloudPuffOffsets;
     private float[] cloudPuffScales;
+    // Horizon wall: vertical quads in a ring around the ship so the cloud
+    // band never ends at grazing angles (horizontal shells go invisible
+    // edge-on). Same noise texture, tiled horizontally.
+    private GameObject[] cloudHorizonGOs;
+    private Material cloudHorizonMat;
+    private const int CloudHorizonCount = 8;
+    private const float CloudHorizonRadius = 5200f;
+    private const float CloudHorizonWidth = 4600f;
     private float cloudDrift;
     private float cloudUvTimer;
     private static readonly Dictionary<string, Texture2D> cloudTextureCache = new Dictionary<string, Texture2D>();
@@ -696,7 +704,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
             }
             float shellAnchorY = cloudScene != null ? cloudScene.transform.position.y : 0f;
             deck.transform.position = new Vector3(shipPosition.x, shellAnchorY + layerY, shipPosition.z);
-            deck.transform.localScale = Vector3.one * 1600f;
+            deck.transform.localScale = Vector3.one * 2600f;
             Collider deckCollider = deck.GetComponent<Collider>();
 
             if (deckCollider != null)
@@ -711,10 +719,12 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
         // Puffs: camera-facing quads scattered through the band for parallax.
         // One shared material = N cheap draw calls, no per-puff allocation.
+        // Puff texture has baked radial falloff so quad borders never show.
+        Texture2D puffTex = GetCloudPuffTexture(profile.coverage);
         cloudPuffMat = new Material(unlit);
-        cloudPuffMat.mainTexture = tex;
-        cloudPuffMat.SetTexture("_BaseMap", tex);
-        cloudPuffMat.SetTexture("_MainTex", tex);
+        cloudPuffMat.mainTexture = puffTex;
+        cloudPuffMat.SetTexture("_BaseMap", puffTex);
+        cloudPuffMat.SetTexture("_MainTex", puffTex);
         Color puffTint = profile.tint;
         puffTint.a = Mathf.Clamp01(profile.opacity * 0.85f);
         cloudPuffMat.color = puffTint;
@@ -760,6 +770,52 @@ public class GalaxyPlanetEntry : MonoBehaviour
             // is shared, so vary rotation/scale instead to break repetition.
             puff.transform.localRotation = Quaternion.Euler(0f, 0f, (float)rng.NextDouble() * 360f);
             cloudPuffGOs[i] = puff;
+        }
+
+        // Horizon wall: ring of vertical quads facing the ship. Horizontal
+        // shells go edge-on (invisible) at the horizon, so without this the
+        // band visibly ends mid-sky. One shared material, 8 draw calls.
+        cloudHorizonMat = new Material(unlit);
+        cloudHorizonMat.mainTexture = tex;
+        cloudHorizonMat.SetTexture("_BaseMap", tex);
+        cloudHorizonMat.SetTexture("_MainTex", tex);
+        cloudHorizonMat.SetTextureScale("_BaseMap", new Vector2(4f, 1f));
+        cloudHorizonMat.SetTextureScale("_MainTex", new Vector2(4f, 1f));
+        Color horizonTint = profile.tint;
+        horizonTint.a = Mathf.Clamp01(profile.opacity * 0.75f);
+        cloudHorizonMat.color = horizonTint;
+        cloudHorizonMat.SetFloat("_Surface", 1f);
+        cloudHorizonMat.SetFloat("_Blend", 0f);
+        cloudHorizonMat.SetOverrideTag("RenderType", "Transparent");
+        cloudHorizonMat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+        cloudHorizonMat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+        cloudHorizonMat.SetInt("_ZWrite", 0);
+        cloudHorizonMat.SetFloat("_Cull", 0f);
+        cloudHorizonMat.DisableKeyword("_ALPHATEST_ON");
+        cloudHorizonMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        cloudHorizonMat.renderQueue = (int)RenderQueue.Transparent;
+
+        cloudHorizonGOs = new GameObject[CloudHorizonCount];
+        for (int i = 0; i < CloudHorizonCount; i++)
+        {
+            GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            wall.name = "PlanetCloudHorizon_" + i;
+            Scene wallScene = SceneFunctions.GetScene();
+            if (wallScene != null)
+            {
+                wall.transform.SetParent(wallScene.transform, true);
+            }
+            Collider wallCollider = wall.GetComponent<Collider>();
+            if (wallCollider != null)
+            {
+                GameObject.Destroy(wallCollider);
+            }
+            Renderer wallRenderer = wall.GetComponent<Renderer>();
+            wallRenderer.sharedMaterial = cloudHorizonMat;
+            // Alternate walls are flipped 180° so the ring doesn't read as
+            // one repeated tile (cheap decorrelation, no extra materials).
+            wall.transform.localRotation = Quaternion.Euler(0f, 0f, (i % 2 == 0) ? 0f : 180f);
+            cloudHorizonGOs[i] = wall;
         }
 
         EnsureCloudWhiteout(profile.tint);
@@ -876,6 +932,54 @@ public class GalaxyPlanetEntry : MonoBehaviour
             }
         }
 
+        if (cloudHorizonGOs != null)
+        {
+            // Ring follows the ship in XZ; each wall faces the ship so the
+            // band reads continuous around the full 360° horizon.
+            bool horizonVisible = distToBand < halfThickness + 2500f;
+            for (int i = 0; i < cloudHorizonGOs.Length; i++)
+            {
+                GameObject wall = cloudHorizonGOs[i];
+                if (wall == null)
+                {
+                    continue;
+                }
+                if (horizonVisible == false)
+                {
+                    wall.SetActive(false);
+                    continue;
+                }
+                wall.SetActive(true);
+                float ang = (float)i / cloudHorizonGOs.Length * Mathf.PI * 2f;
+                Vector3 wallPos = new Vector3(
+                    shipPosition.x + Mathf.Cos(ang) * CloudHorizonRadius,
+                    deckAnchorY + profile.altitude,
+                    shipPosition.z + Mathf.Sin(ang) * CloudHorizonRadius);
+                wall.transform.position = wallPos;
+                wall.transform.localScale = new Vector3(CloudHorizonWidth, halfThickness * 2f + 500f, 1f);
+                Vector3 toShip = new Vector3(shipPosition.x - wallPos.x, 0f, shipPosition.z - wallPos.z);
+                if (toShip.sqrMagnitude > 0.01f)
+                {
+                    Quaternion face = Quaternion.LookRotation(toShip.normalized);
+                    // Keep the baked 180° flip on odd walls, then face ship.
+                    wall.transform.rotation = face * Quaternion.Euler(0f, 0f, (i % 2 == 0) ? 0f : 180f);
+                }
+            }
+            if (cloudHorizonMat != null)
+            {
+                if (pushUv)
+                {
+                    Vector2 huv = cloudHorizonMat.GetTextureOffset("_BaseMap");
+                    huv.x += Time.deltaTime * 0.0015f;
+                    cloudHorizonMat.SetTextureOffset("_BaseMap", huv);
+                    cloudHorizonMat.SetTextureOffset("_MainTex", huv);
+                }
+                Color htint = cloudHorizonMat.color;
+                htint.a = Mathf.Clamp01(profile.opacity * 0.75f) * deckGlobalFade;
+                cloudHorizonMat.color = htint;
+            }
+        }
+
         // Dense haze while the camera is inside the volume: sells being
         // wrapped in cloud. Driven by camera height, not ship height.
         // Starfield-style whiteout overlay hides the shell pop at crossing.
@@ -943,6 +1047,25 @@ public class GalaxyPlanetEntry : MonoBehaviour
         {
             GameObject.Destroy(cloudPuffMat);
             cloudPuffMat = null;
+        }
+
+        if (cloudHorizonGOs != null)
+        {
+            foreach (GameObject wall in cloudHorizonGOs)
+            {
+                if (wall != null)
+                {
+                    GameObject.Destroy(wall);
+                }
+            }
+
+            cloudHorizonGOs = null;
+        }
+
+        if (cloudHorizonMat != null)
+        {
+            GameObject.Destroy(cloudHorizonMat);
+            cloudHorizonMat = null;
         }
 
         if (cloudWhiteoutGO != null)
@@ -1156,10 +1279,12 @@ public class GalaxyPlanetEntry : MonoBehaviour
         }
 
         // Higher coverage -> lower threshold -> more texels survive as cloud.
+        // Lattice periods are integers (4/8/16) so the noise wraps: the
+        // texture tiles seamlessly with RepeatWrapping, no square borders.
         float threshold = 0.68f - Mathf.Clamp01(bucket) * 0.35f;
         const int size = 256;
         Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        tex.wrapMode = TextureWrapMode.Mirror;
+        tex.wrapMode = TextureWrapMode.Repeat;
         tex.filterMode = FilterMode.Bilinear;
         Color[] pixels = new Color[size * size];
 
@@ -1169,10 +1294,53 @@ public class GalaxyPlanetEntry : MonoBehaviour
             {
                 float u = (float)x / size * 4f;
                 float v = (float)y / size * 4f;
-                float fbm = CloudNoise(u, v) * 0.65f + CloudNoise(u * 2.7f + 13f, v * 2.7f + 7f) * 0.35f;
+                float fbm = CloudNoiseTiled(u, v, 4) * 0.65f + CloudNoiseTiled(u * 2f + 11f, v * 2f + 5f, 8) * 0.35f;
                 float alpha = Mathf.Clamp01((fbm - threshold) / 0.25f);
-                float shade = 0.9f + 0.1f * CloudNoise(u * 5f, v * 5f);
+                float shade = 0.9f + 0.1f * CloudNoiseTiled(u * 4f, v * 4f, 16);
                 pixels[y * size + x] = new Color(shade, shade * 0.99f, shade * 0.97f, alpha * 0.88f);
+            }
+        }
+
+        tex.SetPixels(pixels);
+        tex.Apply(false, true);
+        cloudTextureCache[key] = tex;
+        return tex;
+    }
+
+    private static Texture2D GetCloudPuffTexture(float coverage)
+    {
+        // Same seamless noise as the deck, plus a baked radial falloff so
+        // billboard quad borders fade to zero instead of cutting a square.
+        float bucket = Mathf.Round(coverage * 20f) / 20f;
+        string key = "puff_" + bucket.ToString("F2");
+        Texture2D cached;
+        if (cloudTextureCache.TryGetValue(key, out cached) && cached != null)
+        {
+            return cached;
+        }
+
+        float threshold = 0.68f - Mathf.Clamp01(bucket) * 0.35f;
+        const int size = 256;
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        Color[] pixels = new Color[size * size];
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float u = (float)x / size * 4f;
+                float v = (float)y / size * 4f;
+                float fbm = CloudNoiseTiled(u, v, 4) * 0.65f + CloudNoiseTiled(u * 2f + 11f, v * 2f + 5f, 8) * 0.35f;
+                float alpha = Mathf.Clamp01((fbm - threshold) / 0.25f);
+                float shade = 0.9f + 0.1f * CloudNoiseTiled(u * 4f, v * 4f, 16);
+                float nx = ((float)x / size - 0.5f) * 2f;
+                float ny = ((float)y / size - 0.5f) * 2f;
+                float r = Mathf.Sqrt(nx * nx + ny * ny);
+                float falloff = Mathf.Clamp01((1f - r) / 0.45f);
+                falloff = falloff * falloff * (3f - 2f * falloff);
+                pixels[y * size + x] = new Color(shade, shade * 0.99f, shade * 0.97f, alpha * 0.88f * falloff);
             }
         }
 
@@ -1184,17 +1352,33 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
     private static float CloudNoise(float x, float y)
     {
+        return CloudNoiseTiled(x, y, 0);
+    }
+
+    private static float CloudNoiseTiled(float x, float y, int period)
+    {
         int xi = Mathf.FloorToInt(x);
         int yi = Mathf.FloorToInt(y);
         float xf = x - xi;
         float yf = y - yi;
-        float a = CloudHash(xi, yi);
-        float b = CloudHash(xi + 1, yi);
-        float c = CloudHash(xi, yi + 1);
-        float d = CloudHash(xi + 1, yi + 1);
+        float a = CloudHashTiled(xi, yi, period);
+        float b = CloudHashTiled(xi + 1, yi, period);
+        float c = CloudHashTiled(xi, yi + 1, period);
+        float d = CloudHashTiled(xi + 1, yi + 1, period);
         float u = xf * xf * (3f - 2f * xf);
         float v = yf * yf * (3f - 2f * yf);
         return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    }
+
+    private static float CloudHashTiled(int x, int y, int period)
+    {
+        // Wrap the lattice so noise(x) == noise(x + period): seamless tiling.
+        if (period > 0)
+        {
+            x = ((x % period) + period) % period;
+            y = ((y % period) + period) % period;
+        }
+        return CloudHash(x, y);
     }
 
     private static float CloudHash(int x, int y)

@@ -144,6 +144,72 @@ public class PlanetNavigation : MonoBehaviour
             SpawnBeacon(scene, poi, groundY);
         }
 
+        // Static surface props (vehicles, buildings): ground-clamped
+        // prefabs from Resources/objects/vehicles/<prefab>.
+        if (location.props != null)
+        {
+            foreach (PlanetPOIProp prop in location.props)
+            {
+                if (prop == null || string.IsNullOrEmpty(prop.prefab))
+                {
+                    continue;
+                }
+
+                float groundY = float.NaN;
+                float waited = 0f;
+
+                while (float.IsNaN(groundY) && waited < 20f)
+                {
+                    Vector3 probe = new Vector3(
+                        scene.transform.position.x + prop.x,
+                        2000f,
+                        scene.transform.position.z + prop.z);
+                    groundY = SampleGroundHeight(probe);
+                    if (float.IsNaN(groundY))
+                    {
+                        waited += 0.5f;
+                        yield return new WaitForSeconds(0.5f);
+                        scene = SceneFunctions.GetScene();
+
+                        if (scene == null)
+                        {
+                            yield break;
+                        }
+                    }
+                }
+
+                if (float.IsNaN(groundY))
+                {
+                    Debug.LogWarning("[PlanetNav] No ground for prop " + prop.prefab + ", skipped.");
+                    continue;
+                }
+
+                GameObject prefab = Resources.Load<GameObject>("objects/vehicles/" + prop.prefab);
+
+                if (prefab == null)
+                {
+                    Debug.LogWarning("[PlanetNav] Prop prefab not found: " + prop.prefab);
+                    continue;
+                }
+
+                GameObject go = GameObject.Instantiate(prefab);
+                go.name = "POIProp_" + prop.prefab;
+                go.transform.SetParent(scene.transform, true);
+                go.transform.position = new Vector3(
+                    scene.transform.position.x + prop.x,
+                    scene.transform.position.y + groundY,
+                    scene.transform.position.z + prop.z);
+                go.transform.rotation = Quaternion.Euler(0f, prop.rotY, 0f);
+                // Ground by bounds, not pivot: model origins are arbitrary
+                // (the Sandcrawler hangs ~16 m below its own pivot).
+                // Y-rotation keeps Y extents, so one lift is exact.
+                Bounds bb = GetPropBounds(go);
+                float lift = (scene.transform.position.y + groundY) - bb.min.y;
+                go.transform.position += Vector3.up * lift;
+                beacons.Add(go);
+            }
+        }
+
         RetargetNearest(true);
     }
 
@@ -371,6 +437,34 @@ public class PlanetNavigation : MonoBehaviour
         Renderer renderer = pillar.GetComponent<Renderer>();
         renderer.sharedMaterial = mat;
         beacons.Add(pillar);
+    }
+
+    // Union of all renderer bounds (handles multi-mesh props).
+    private static Bounds GetPropBounds(GameObject go)
+    {
+        Renderer[] renderers = go.GetComponentsInChildren<Renderer>(true);
+        Bounds bb = new Bounds(go.transform.position, Vector3.zero);
+        bool init = false;
+
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            if (!init)
+            {
+                bb = renderer.bounds;
+                init = true;
+            }
+            else
+            {
+                bb.Encapsulate(renderer.bounds);
+            }
+        }
+
+        return bb;
     }
 
     // Same tile-only sampling as entry: NaN while tiles aren't ready.

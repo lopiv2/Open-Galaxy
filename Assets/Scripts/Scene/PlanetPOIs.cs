@@ -8,6 +8,15 @@ public class PlanetPOIEntry
 }
 
 [System.Serializable]
+public class PlanetPOIProp
+{
+    public string prefab;
+    public float x;
+    public float z;
+    public float rotY;
+}
+
+[System.Serializable]
 public class PlanetPOILocation
 {
     public string planet;
@@ -16,6 +25,7 @@ public class PlanetPOILocation
     public float entryX;
     public float entryZ;
     public PlanetPOIEntry[] pois;
+    public PlanetPOIProp[] props;
 }
 
 [System.Serializable]

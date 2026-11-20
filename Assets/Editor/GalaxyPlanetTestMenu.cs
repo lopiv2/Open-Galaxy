@@ -20,7 +20,7 @@ public static class GalaxyPlanetTestMenu
         }
     }
 
-    [UnityEditor.MenuItem("Tools/Open Galaxy/Test A-Wing en Tatooine (planeta)")]
+    [UnityEditor.MenuItem("Tools/Open Galaxy/Test X-Wing en Tatooine (planeta)")]
     private static void RunTest()
     {
         if (EditorApplication.isPlaying)

@@ -5,7 +5,7 @@ using UnityEngine;
 // sin pasar por inicio -> Galaxy Mode -> mapa -> volar hasta el planeta.
 public static class GalaxyPlanetTestTool
 {
-    public const string TestShip = "awing";
+    public const string TestShip = "xwing";
     public const string TestPlanet = "Tatooine";
 
     // Llamado desde el menu principal (Tools) y desde el menu Tools del editor.

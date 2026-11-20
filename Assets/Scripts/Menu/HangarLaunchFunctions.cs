@@ -423,7 +423,6 @@ public static class HangarLaunchFunctions
     public static IEnumerator LaunchShip(HangarLaunch hangarLaunch)
     {
         hangarLaunch.launchbutton.SetActive(false);
-
         Vector3 groundlocation = hangarLaunch.groundlocation.transform.position;
         Vector3 startPosition = hangarLaunch.startlocation.transform.position;
         Vector3 endPosition = hangarLaunch.endlocation.transform.position;
@@ -503,6 +502,12 @@ public static class HangarLaunchFunctions
         //This resets the fade to transparent once the cutscene is finished 
         HudFunctions_Old.SetBackgroundAlphaAndColour(0, colour);
 
+        //Automatic S-foils: take off in attack position (clears manual override).
+        if (hangarLaunch.ship != null)
+        {
+            WingSystemFunctions.OpenWings(hangarLaunch.ship.GetComponent<WingSystems>());
+        }
+
         HangarLaunchFunctions.CloseHangarLaunch(hangarLaunch);
     }
 
@@ -510,6 +515,12 @@ public static class HangarLaunchFunctions
     public static IEnumerator LandShip(HangarLaunch hangarLaunch)
     {
         hangarLaunch.launchbutton.SetActive(false);
+
+        //Automatic S-foils: fold for landing (clears manual override).
+        if (hangarLaunch.ship != null)
+        {
+            WingSystemFunctions.CloseWings(hangarLaunch.ship.GetComponent<WingSystems>());
+        }
 
         Vector3 groundlocation = hangarLaunch.groundlocation.transform.position;
         Vector3 startPosition = hangarLaunch.startlocation.transform.position;

@@ -22,6 +22,7 @@ public class WeaponManagement : MonoBehaviour
     public bool toggleWeapons;
     public bool toggleWeaponNumber;
     public float toggleWeaponPressedTime;
+    public float wingsClosedWarnTime;
     public bool weaponsLock = false;
     public bool preventWeaponChange = false;
 

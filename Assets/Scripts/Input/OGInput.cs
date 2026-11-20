@@ -32,6 +32,7 @@ public class OGInput : MonoBehaviour
     public bool matchSpeed;
     public bool focusCamera;
     public bool fireCounterMeasures;
+    public bool toggleWings;
 
     //Choice node inputs
     public bool choiceUp;

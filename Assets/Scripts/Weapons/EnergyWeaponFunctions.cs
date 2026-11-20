@@ -533,6 +533,19 @@ public static class EnergyWeaponFunctions
         WeaponManagement weaponManagement = energyWeapon.weaponManagement;
         Ship ship = energyWeapon.ship;
 
+        //Rogue Squadron rule: closed S-foils = no weapons. Warn, throttled.
+        if (WingSystemFunctions.WeaponsBlockedByWings(ship) == true)
+        {
+            if (Time.time > weaponManagement.wingsClosedWarnTime)
+            {
+                weaponManagement.wingsClosedWarnTime = Time.time + 2f;
+                AudioFunctions.PlayAudioClip(ship.audioManager, "beep05_error", "Cockpit", ship.gameObject.transform.position, 0, 1, 500, 0.9f);
+                HudFunctions.AddToMissionLog("S-FOILS CLOSED: OPEN WINGS TO FIRE (V)");
+            }
+
+            return;
+        }
+
         if (weaponManagement.fireWeapon == true & ship.isAI == false || weaponManagement.rapidFire == true & ship.isAI == false & weaponManagement.hasRapidFire == true)
         {
             InitiateFiring(energyWeapon);

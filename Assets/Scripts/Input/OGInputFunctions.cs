@@ -94,6 +94,7 @@ public static class OGInputFunctions
         ogInput.matchSpeed = keyboard.eKey.isPressed;
         ogInput.focusCamera = mouse.rightButton.isPressed;
         ogInput.fireCounterMeasures = keyboard.spaceKey.isPressed;
+        ogInput.toggleWings = keyboard.vKey.wasPressedThisFrame;
     }
 
     //This gets the controller input
@@ -207,6 +208,7 @@ public static class OGInputFunctions
         ogInput.toggleWeaponNumber = gamepad.aButton.isPressed;
         ogInput.matchSpeed = gamepad.leftStickButton.isPressed;
         ogInput.focusCamera = gamepad.leftTrigger.isPressed;
+        ogInput.toggleWings = gamepad.rightStickButton.wasPressedThisFrame;
     }
 
     public static float ApplyInputCurve(float input)

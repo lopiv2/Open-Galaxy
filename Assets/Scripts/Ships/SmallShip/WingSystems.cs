@@ -7,6 +7,11 @@ public class WingSystems : MonoBehaviour
 
     [Header("Wing Functions")]
     public bool wingsOpen = true;
+    // True when the player manually forced the state in flight (V / stick).
+    // Automatic sequences (launch, land, hyperspace, hangar) always clear it.
+    public bool wingsOverridden = false;
+    // Next Time.time when a new toggle is accepted (3.4s animation lock).
+    public float wingToggleReadyTime = 0f;
     
     [Header("Wing GameObjects")]
     public Transform[] wings;

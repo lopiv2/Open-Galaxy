@@ -114,6 +114,19 @@ public static class TorpedoSystemFunctions
     //This causes the player to fire a torpedo
     public static void FireTorpedoPlayer(TorpedoSystem torpedoSystem)
     {
+        //Rogue Squadron rule: closed S-foils = no weapons. Warn, throttled.
+        if (WingSystemFunctions.WeaponsBlockedByWings(torpedoSystem.ship) == true)
+        {
+            if (Time.time > torpedoSystem.weaponManagement.wingsClosedWarnTime)
+            {
+                torpedoSystem.weaponManagement.wingsClosedWarnTime = Time.time + 2f;
+                AudioFunctions.PlayAudioClip(torpedoSystem.ship.audioManager, "beep05_error", "Cockpit", torpedoSystem.gameObject.transform.position, 0, 1, 500, 0.9f);
+                HudFunctions.AddToMissionLog("S-FOILS CLOSED: OPEN WINGS TO FIRE (V)");
+            }
+
+            return;
+        }
+
         if (torpedoSystem.weaponManagement.fireWeapon == true & torpedoSystem.ship.isAI == false)
         {
             FireTorpedo(torpedoSystem);

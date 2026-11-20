@@ -4,9 +4,82 @@ using UnityEngine;
 
 public static class WingSystemFunctions
 {
-    //Opens the wings
-    public static void OpenWings(WingSystems wingSystem)
+    // True when this ship model has open/close wing markers (X-Wing, B-Wing...).
+    // Ships without them (TIE, A-Wing) ignore every wing command.
+    public static bool HasMovableWings(WingSystems wingSystem)
     {
+        if (wingSystem == null)
+        {
+            return false;
+        }
+
+        if (wingSystem.wings == null)
+        {
+            FindMovableWings(wingSystem);
+        }
+
+        return wingSystem.wing01 != null & wingSystem.wing01_open != null & wingSystem.wing01_closed != null;
+    }
+
+    // Manual player toggle (V / right stick). Rogue Squadron rule is applied
+    // by the callers: closed = faster but weapons blocked. Automatic
+    // sequences call OpenWings/CloseWings directly and always win.
+    public static void ToggleWingsManual(WingSystems wingSystem)
+    {
+        if (wingSystem == null || wingSystem.ship == null || wingSystem.ship.isAI == true)
+        {
+            return;
+        }
+
+        if (HasMovableWings(wingSystem) == false)
+        {
+            return;
+        }
+
+        if (Time.time < wingSystem.wingToggleReadyTime)
+        {
+            return;
+        }
+
+        if (wingSystem.wingsOpen == true)
+        {
+            CloseWings(wingSystem, true);
+        }
+        else
+        {
+            OpenWings(wingSystem, true);
+        }
+    }
+
+    //Rogue Squadron rule: a player ship with movable wings and foils closed
+    //cannot fire. AI is never blocked (AI keeps foils open in combat).
+    public static bool WeaponsBlockedByWings(Ship ship)
+    {
+        if (ship == null || ship.isAI == true)
+        {
+            return false;
+        }
+
+        if (ship.wingSystems == null || ship.wingSystems.wingsOpen == true)
+        {
+            return false;
+        }
+
+        return HasMovableWings(ship.wingSystems);
+    }
+
+    //Opens the wings
+    public static void OpenWings(WingSystems wingSystem, bool manual = false)
+    {
+        if (wingSystem == null)
+        {
+            return;
+        }
+
+        // The automatic sequences always clear a previous manual override,
+        // even when the wings are already in the requested position.
+        wingSystem.wingsOverridden = manual;
+
         if (wingSystem.wingsOpen != true)
         {
             //This searches for movable wings on the ship if they haven't already been loaded
@@ -17,6 +90,7 @@ public static class WingSystemFunctions
 
             //This indicates to other functions whether the wings are open or closed
             wingSystem.wingsOpen = true;
+            wingSystem.wingToggleReadyTime = Time.time + 3.5f;
 
             //This activates the wing rotation
             if (wingSystem.wing01 != null & wingSystem.wing01_open != null & wingSystem.wing01_closed != null)
@@ -54,10 +128,14 @@ public static class WingSystemFunctions
     }
 
     //Closes the wings
-    public static void CloseWings(WingSystems wingSystems)
+    public static void CloseWings(WingSystems wingSystems, bool manual = false)
     {
         if (wingSystems != null)
         {
+            // The automatic sequences always clear a previous manual override,
+            // even when the wings are already in the requested position.
+            wingSystems.wingsOverridden = manual;
+
             if (wingSystems.wingsOpen != false)
             {
                 //This searches for movable wings on the ship if they haven't already been loaded
@@ -68,6 +146,7 @@ public static class WingSystemFunctions
 
                 //This indicates to other functions whether the wings are open or closed
                 wingSystems.wingsOpen = false;
+                wingSystems.wingToggleReadyTime = Time.time + 3.5f;
 
                 //This activates the wing rotation
                 if (wingSystems.wing01 != null & wingSystems.wing01_open != null & wingSystems.wing01_closed != null)
@@ -140,6 +219,13 @@ public static class WingSystemFunctions
     //Snaps the wing open
     public static void SnapOpenWings(WingSystems wingSystem)
     {
+        if (wingSystem == null)
+        {
+            return;
+        }
+
+        wingSystem.wingsOverridden = false;
+
         if (wingSystem.wingsOpen != true)
         {
             //This searches for movable wings on the ship if they haven't already been loaded
@@ -177,6 +263,13 @@ public static class WingSystemFunctions
     //Snaps the wings shut
     public static void SnapClosedWings(WingSystems wingSystems)
     {
+        if (wingSystems == null)
+        {
+            return;
+        }
+
+        wingSystems.wingsOverridden = false;
+
         if (wingSystems.wingsOpen != false)
         {
             //This searches for movable wings on the ship if they haven't already been loaded

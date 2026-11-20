@@ -68,6 +68,7 @@ public class FlightControlSystem_Small : MonoBehaviour
     {
         //Input functions
         FlightControlSystem_SmallFunctions.GetInput(this);
+        FlightControlSystem_SmallFunctions.UpdateWingToggle(this);
         FlightControlSystem_SmallFunctions.TurnShipAround(this);
         FlightControlSystem_SmallFunctions.SpinShip(this);
         FlightControlSystem_SmallFunctions.ControlLock(this);

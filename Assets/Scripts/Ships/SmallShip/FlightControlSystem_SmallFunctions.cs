@@ -120,6 +120,38 @@ public static class FlightControlSystem_SmallFunctions
         }
     }
 
+    //Manual S-foil toggle (V / right stick). Automatic sequences
+    //(launch, land, hyperspace) call Open/CloseWings directly and always win.
+    public static void UpdateWingToggle(FlightControlSystem_Small flightControlSystem)
+    {
+        if (flightControlSystem.ship.isAI == true)
+        {
+            return;
+        }
+
+        if (flightControlSystem.ship.ogInput == null)
+        {
+            return;
+        }
+
+        if (flightControlSystem.ship.ogInput.toggleWings == false)
+        {
+            return;
+        }
+
+        //Never fight the automatic sequences or a disabled ship.
+        if (flightControlSystem.ship.jumpingToHyperspace == true
+            || flightControlSystem.ship.exitingHyperspace == true
+            || flightControlSystem.docking == true
+            || flightControlSystem.controlLock == true
+            || flightControlSystem.ship.damageSystem.isDisabled == true)
+        {
+            return;
+        }
+
+        WingSystemFunctions.ToggleWingsManual(flightControlSystem.ship.wingSystems);
+    }
+
     //This autmomatically turns the ship around when it reaches the boundaries of the game area, i.e. 15000m
     public static void TurnShipAround(FlightControlSystem_Small flightControlSystem)
     {
@@ -256,6 +288,16 @@ public static class FlightControlSystem_SmallFunctions
             }
 
             flightControlSystem.wep = false;
+        }
+
+        //Rogue Squadron cruise mode: closed S-foils trade weapons for speed.
+        //Only applies to ships with movable wings (X-Wing, B-Wing...).
+        if (flightControlSystem.ship.wingSystems != null
+            && flightControlSystem.ship.wingSystems.wingsOpen == false
+            && WingSystemFunctions.HasMovableWings(flightControlSystem.ship.wingSystems) == true)
+        {
+            actualSpeedRating = actualSpeedRating * 1.3f;
+            acclerationAmount = acclerationAmount * 1.3f;
         }
 
         //This controls the throttle of the ship, and prevents it going above the speed rating or below zero

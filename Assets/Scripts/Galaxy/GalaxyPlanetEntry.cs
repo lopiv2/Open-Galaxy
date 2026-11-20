@@ -733,7 +733,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         cloudPuffGOs = new GameObject[puffCount];
         cloudPuffOffsets = new Vector3[puffCount];
         cloudPuffScales = new float[puffCount];
-        System.Random rng = new System.Random(GetSeedForSystem(cachedLocation) ^ 0x9E3779B9);
+        System.Random rng = new System.Random(GetSeedForSystem(cachedLocation) ^ unchecked((int)0x9E3779B9));
         for (int i = 0; i < puffCount; i++)
         {
             float ang = (float)(rng.NextDouble() * Mathf.PI * 2f);

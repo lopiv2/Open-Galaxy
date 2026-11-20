@@ -506,6 +506,7 @@ public static class HangarLaunchFunctions
         if (hangarLaunch.ship != null)
         {
             WingSystemFunctions.OpenWings(hangarLaunch.ship.GetComponent<WingSystems>());
+            HudFunctions.AddToMissionLog("S-FOILS OPEN - WEAPONS ONLINE");
         }
 
         HangarLaunchFunctions.CloseHangarLaunch(hangarLaunch);
@@ -520,6 +521,7 @@ public static class HangarLaunchFunctions
         if (hangarLaunch.ship != null)
         {
             WingSystemFunctions.CloseWings(hangarLaunch.ship.GetComponent<WingSystems>());
+            HudFunctions.AddToMissionLog("S-FOILS CLOSED - CRUISE MODE");
         }
 
         Vector3 groundlocation = hangarLaunch.groundlocation.transform.position;

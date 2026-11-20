@@ -92,6 +92,13 @@ public static class WingSystemFunctions
             wingSystem.wingsOpen = true;
             wingSystem.wingToggleReadyTime = Time.time + 3.5f;
 
+            //Manual toggle: the MissionLog shows a single sticky line, so the
+            //open direction must overwrite the "closed" warning explicitly.
+            if (manual == true && wingSystem.ship != null && wingSystem.ship.isAI == false)
+            {
+                HudFunctions.AddToMissionLog("S-FOILS OPEN - WEAPONS ONLINE");
+            }
+
             //This activates the wing rotation
             if (wingSystem.wing01 != null & wingSystem.wing01_open != null & wingSystem.wing01_closed != null)
             {
@@ -147,6 +154,13 @@ public static class WingSystemFunctions
                 //This indicates to other functions whether the wings are open or closed
                 wingSystems.wingsOpen = false;
                 wingSystems.wingToggleReadyTime = Time.time + 3.5f;
+
+                //Manual toggle: overwrite the sticky MissionLog line so the
+                //HUD reflects the new state immediately.
+                if (manual == true && wingSystems.ship != null && wingSystems.ship.isAI == false)
+                {
+                    HudFunctions.AddToMissionLog("S-FOILS CLOSED - CRUISE MODE (V)");
+                }
 
                 //This activates the wing rotation
                 if (wingSystems.wing01 != null & wingSystems.wing01_open != null & wingSystems.wing01_closed != null)

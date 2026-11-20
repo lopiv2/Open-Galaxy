@@ -24,15 +24,26 @@ public class GalaxyPlanetEntry : MonoBehaviour
     private EntryState state = EntryState.InSpace;
     private GameObject terrainGO;
     private TerrainStreamer streamer;
-    // Volumetric-look cloud band: stacked translucent shells around
-    // CloudDeckAltitude, each with decorrelated noise so the stack reads as
-    // a 3D volume instead of a flat sheet. Shells follow the ship in XZ.
+    // Volumetric-look cloud band (hybrid Elite + Starfield): stacked
+    // translucent shells for the deck seen from above, instanced billboard
+    // puffs for parallax while crossing, and a fullscreen whiteout haze
+    // while inside (Starfield-style cut hiding the shell pop). Profile
+    // (coverage/density/tint/altitude) comes from PlanetTypes.json per
+    // planetType so each climate gets its own roof.
     private GameObject[] cloudDeckGOs;
     private Material[] cloudMats;
+    private GameObject[] cloudPuffGOs;
+    private Material cloudPuffMat;
+    private Vector3[] cloudPuffOffsets;
+    private float[] cloudPuffScales;
     private float cloudDrift;
-    private static Texture2D cloudTexture;
+    private float cloudUvTimer;
+    private static readonly Dictionary<string, Texture2D> cloudTextureCache = new Dictionary<string, Texture2D>();
     private GameObject fadeCanvasGO;
     private Image fadeImage;
+    private GameObject cloudWhiteoutGO;
+    private Image cloudWhiteoutImage;
+    private CloudProfile activeCloud;
     private GameObject hiddenPlanet;
     private Vector3 planetCenter;
     private float planetRadius;
@@ -47,17 +58,30 @@ public class GalaxyPlanetEntry : MonoBehaviour
     private const float ExitCeilingAGL = 1500f;
     private const float ExitArmAGL = 800f;
     private const float MinClearance = 25f;
-    // Cloud deck: the ship spawns above it and descends through on entry.
-    private const float CloudDeckAltitude = 1400f;
+    // Fallback deck when PlanetTypes.json has no cloud block for the planet.
+    // Real values come from CloudProfile (JSON per planetType).
+    private const float DefaultCloudAltitude = 1400f;
+    private const float DefaultCloudThickness = 400f;
     private const float EntryAltitudeAboveClouds = 800f;
-    // Cloud volume shape.
-    private const int CloudLayerCount = 8;
-    private const float CloudBandHalfThickness = 200f;
+    // Cloud volume shape (runtime layer count derives from coverage: 3-6).
+    private const int CloudLayerMax = 6;
     private const float CloudLayerFadeDistance = 150f;
-    private const float CloudLayerOpacity = 0.34f;
+    private static readonly Color DefaultCloudTint = new Color(1f, 0.98f, 0.95f);
     private const float EntryFadeColorR = 0.96f;
     private const float EntryFadeColorG = 0.85f;
     private const float EntryFadeColorB = 0.66f;
+
+    // Per-planet roof resolved from PlanetTypes.json.
+    private struct CloudProfile
+    {
+        public float coverage;
+        public float opacity;
+        public Color tint;
+        public float altitude;
+        public float thickness;
+        public int puffs;
+        public float whiteout;
+    }
 
     // Floating-origin freeze for planet flight (plan B): the scene anchor is
     // reset to zero on entry and restored on exit, so RecenterScene never
@@ -323,17 +347,18 @@ public class GalaxyPlanetEntry : MonoBehaviour
         // Desert day sky + sandy haze. The binary suns stay where they are
         // (their flares still glow through the haze from the ground).
         TrySetSkybox("loworbit_desert_png01", "loworbit_desert01", "sky_clouds01");
-        SceneFunctions.SetFogDistanceAndColor(800f, 7000f, "#D9B98C");
+        activeCloud = GetCloudProfile(cachedLocation);
+        SceneFunctions.SetFogDistanceAndColor(800f, 7000f, ColorToHex(activeCloud.tint));
 
         SpawnTerrain(scene);
-        SpawnCloudDeck(mainShip.transform.position);
+        SpawnCloudDeck(mainShip.transform.position, activeCloud);
 
         // Let TerrainStreamer build tiles and physics cook their colliders
         // before sampling the ground below the spawn point.
         yield return null;
         yield return new WaitForFixedUpdate();
 
-        float entryAltitude = scene.transform.position.y + CloudDeckAltitude + EntryAltitudeAboveClouds;
+        float entryAltitude = scene.transform.position.y + activeCloud.altitude + EntryAltitudeAboveClouds;
         Vector3 shipPos = mainShip.transform.position;
         float groundAtSpawn = SampleGroundHeight(new Vector3(shipPos.x, entryAltitude + 1000f, shipPos.z));
         float safeAltitude = float.IsNaN(groundAtSpawn)
@@ -609,11 +634,11 @@ public class GalaxyPlanetEntry : MonoBehaviour
         DestroyCloudDeck();
     }
 
-    // Stacked translucent shells forming a cloud volume. Each shell uses the
-    // same procedural FBM texture but different tiling, UV offset and drift,
-    // so the stack reads as 3D noise instead of a repeated sheet. Shells near
-    // the camera fade out to avoid a hard pop when crossing them.
-    private void SpawnCloudDeck(Vector3 shipPosition)
+    // Hybrid Elite + Starfield deck. Deck shells (seen from above) + billboard
+    // puffs (parallax while crossing) + whiteout haze (hides shell pop).
+    // Layer count and alpha derive from the per-planet coverage so a desert
+    // roof reads broken and a tropical roof reads overcast.
+    private void SpawnCloudDeck(Vector3 shipPosition, CloudProfile profile)
     {
         DestroyCloudDeck();
 
@@ -624,26 +649,32 @@ public class GalaxyPlanetEntry : MonoBehaviour
             unlit = Shader.Find("Unlit/Color");
         }
 
-        cloudDeckGOs = new GameObject[CloudLayerCount];
-        cloudMats = new Material[CloudLayerCount];
+        int layerCount = Mathf.Clamp(3 + Mathf.RoundToInt(profile.coverage * 3f), 3, CloudLayerMax);
+        float halfThickness = profile.thickness * 0.5f;
+        Texture2D tex = GetCloudTexture(profile.coverage);
 
-        for (int i = 0; i < CloudLayerCount; i++)
+        cloudDeckGOs = new GameObject[layerCount];
+        cloudMats = new Material[layerCount];
+
+        for (int i = 0; i < layerCount; i++)
         {
-            float layerT = CloudLayerCount == 1 ? 0.5f : (float)i / (CloudLayerCount - 1);
-            float layerY = CloudDeckAltitude - CloudBandHalfThickness + layerT * CloudBandHalfThickness * 2f;
+            float layerT = layerCount == 1 ? 0.5f : (float)i / (layerCount - 1);
+            float layerY = profile.altitude - halfThickness + layerT * halfThickness * 2f;
             float tiling = 10f - layerT * 5f;
 
             Material mat = new Material(unlit);
-            mat.mainTexture = GetCloudTexture();
-            mat.SetTexture("_BaseMap", GetCloudTexture());
-            mat.SetTexture("_MainTex", GetCloudTexture());
+            mat.mainTexture = tex;
+            mat.SetTexture("_BaseMap", tex);
+            mat.SetTexture("_MainTex", tex);
             mat.SetTextureScale("_BaseMap", new Vector2(tiling, tiling));
             mat.SetTextureScale("_MainTex", new Vector2(tiling, tiling));
             // Decorrelate the noise pattern between shells.
             Vector2 seedOffset = new Vector2(i * 0.37f, i * 0.61f);
             mat.SetTextureOffset("_BaseMap", seedOffset);
             mat.SetTextureOffset("_MainTex", seedOffset);
-            mat.color = new Color(1f, 0.98f, 0.95f, CloudLayerOpacity);
+            Color tint = profile.tint;
+            tint.a = profile.opacity;
+            mat.color = tint;
             mat.SetFloat("_Surface", 1f);
             mat.SetFloat("_Blend", 0f);
             mat.SetOverrideTag("RenderType", "Transparent");
@@ -678,7 +709,62 @@ public class GalaxyPlanetEntry : MonoBehaviour
             cloudDeckGOs[i] = deck;
         }
 
+        // Puffs: camera-facing quads scattered through the band for parallax.
+        // One shared material = N cheap draw calls, no per-puff allocation.
+        cloudPuffMat = new Material(unlit);
+        cloudPuffMat.mainTexture = tex;
+        cloudPuffMat.SetTexture("_BaseMap", tex);
+        cloudPuffMat.SetTexture("_MainTex", tex);
+        Color puffTint = profile.tint;
+        puffTint.a = Mathf.Clamp01(profile.opacity * 0.85f);
+        cloudPuffMat.color = puffTint;
+        cloudPuffMat.SetFloat("_Surface", 1f);
+        cloudPuffMat.SetFloat("_Blend", 0f);
+        cloudPuffMat.SetOverrideTag("RenderType", "Transparent");
+        cloudPuffMat.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha);
+        cloudPuffMat.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
+        cloudPuffMat.SetInt("_ZWrite", 0);
+        cloudPuffMat.SetFloat("_Cull", 0f);
+        cloudPuffMat.DisableKeyword("_ALPHATEST_ON");
+        cloudPuffMat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        cloudPuffMat.renderQueue = (int)RenderQueue.Transparent;
+
+        int puffCount = Mathf.Clamp(profile.puffs, 0, 80);
+        cloudPuffGOs = new GameObject[puffCount];
+        cloudPuffOffsets = new Vector3[puffCount];
+        cloudPuffScales = new float[puffCount];
+        System.Random rng = new System.Random(GetSeedForSystem(cachedLocation) ^ 0x9E3779B9);
+        for (int i = 0; i < puffCount; i++)
+        {
+            float ang = (float)(rng.NextDouble() * Mathf.PI * 2f);
+            float rad = 150f + (float)rng.NextDouble() * 1200f;
+            float yOff = ((float)rng.NextDouble() * 2f - 1f) * halfThickness;
+            cloudPuffOffsets[i] = new Vector3(Mathf.Cos(ang) * rad, yOff, Mathf.Sin(ang) * rad);
+            cloudPuffScales[i] = (150f + (float)rng.NextDouble() * 200f) * (0.7f + profile.coverage * 0.6f);
+
+            GameObject puff = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            puff.name = "PlanetCloudPuff_" + i;
+            Scene puffScene = SceneFunctions.GetScene();
+            if (puffScene != null)
+            {
+                puff.transform.SetParent(puffScene.transform, true);
+            }
+            Collider puffCollider = puff.GetComponent<Collider>();
+            if (puffCollider != null)
+            {
+                GameObject.Destroy(puffCollider);
+            }
+            Renderer puffRenderer = puff.GetComponent<Renderer>();
+            puffRenderer.sharedMaterial = cloudPuffMat;
+            // Per-puff UV variation without extra materials: offset via texture
+            // is shared, so vary rotation/scale instead to break repetition.
+            puff.transform.localRotation = Quaternion.Euler(0f, 0f, (float)rng.NextDouble() * 360f);
+            cloudPuffGOs[i] = puff;
+        }
+
+        EnsureCloudWhiteout(profile.tint);
         cloudDrift = 0f;
+        cloudUvTimer = 0f;
     }
 
     private void UpdateCloudDeck(Vector3 shipPosition)
@@ -688,10 +774,21 @@ public class GalaxyPlanetEntry : MonoBehaviour
             return;
         }
 
+        CloudProfile profile = activeCloud;
+        float halfThickness = profile.thickness * 0.5f;
+
         cloudDrift += Time.deltaTime * 2.5f;
+        // Scroll UVs at ~15 Hz: same look, fewer material updates.
+        cloudUvTimer += Time.deltaTime;
+        bool pushUv = cloudUvTimer >= 0.066f;
+        if (pushUv)
+        {
+            cloudUvTimer = 0f;
+        }
 
         float deckAnchorY = 0f;
         float camY = shipPosition.y;
+        Vector3 camPos = shipPosition;
         Scene deckSceneInit = SceneFunctions.GetScene();
         if (deckSceneInit != null)
         {
@@ -700,8 +797,16 @@ public class GalaxyPlanetEntry : MonoBehaviour
             if (deckSceneInit.ogCamera != null && deckSceneInit.ogCamera.mainCamera != null)
             {
                 camY = deckSceneInit.ogCamera.mainCamera.transform.position.y;
+                camPos = deckSceneInit.ogCamera.mainCamera.transform.position;
             }
         }
+
+        // LOD: far above/below the band the deck is a distant lid; hide puffs
+        // entirely and (below) let fog carry the look to save overdraw.
+        float distToBand = Mathf.Abs(camY - (deckAnchorY + profile.altitude));
+        float bandRange = halfThickness + 1200f;
+        float deckGlobalFade = 1f - Mathf.Clamp01((distToBand - bandRange) / 800f);
+        bool puffsVisible = distToBand < halfThickness + 900f;
 
         for (int i = 0; i < cloudDeckGOs.Length; i++)
         {
@@ -710,8 +815,9 @@ public class GalaxyPlanetEntry : MonoBehaviour
                 continue;
             }
 
-            float layerT = CloudLayerCount == 1 ? 0.5f : (float)i / (CloudLayerCount - 1);
-            float layerY = CloudDeckAltitude - CloudBandHalfThickness + layerT * CloudBandHalfThickness * 2f;
+            int layerCount = cloudDeckGOs.Length;
+            float layerT = layerCount == 1 ? 0.5f : (float)i / (layerCount - 1);
+            float layerY = profile.altitude - halfThickness + layerT * halfThickness * 2f;
             float layerDrift = cloudDrift * (1f + layerT * 0.6f);
             Scene deckScene = SceneFunctions.GetScene();
             if (deckScene != null)
@@ -722,28 +828,71 @@ public class GalaxyPlanetEntry : MonoBehaviour
                 shipPosition.x + layerDrift,
                 deckAnchorY + layerY,
                 shipPosition.z + layerDrift * 0.6f);
-            Vector2 uvOffset = new Vector2(
-                i * 0.37f + layerDrift * 0.0004f,
-                i * 0.61f + layerDrift * 0.00025f);
-            cloudMats[i].SetTextureOffset("_BaseMap", uvOffset);
-            cloudMats[i].SetTextureOffset("_MainTex", uvOffset);
+            if (pushUv)
+            {
+                Vector2 uvOffset = new Vector2(
+                    i * 0.37f + layerDrift * 0.0004f,
+                    i * 0.61f + layerDrift * 0.00025f);
+                cloudMats[i].SetTextureOffset("_BaseMap", uvOffset);
+                cloudMats[i].SetTextureOffset("_MainTex", uvOffset);
+            }
 
             // Fade shells out as the camera approaches them: the pop happens
             // at the camera plane, not at the ship, so fade by camera height.
             float distToCam = Mathf.Abs(camY - (deckAnchorY + layerY));
             float fade = Mathf.Clamp01(distToCam / CloudLayerFadeDistance);
             Color tint = cloudMats[i].color;
-            tint.a = CloudLayerOpacity * fade;
+            tint.a = profile.opacity * fade * deckGlobalFade;
             cloudMats[i].color = tint;
+        }
+
+        if (cloudPuffGOs != null)
+        {
+            for (int i = 0; i < cloudPuffGOs.Length; i++)
+            {
+                GameObject puff = cloudPuffGOs[i];
+                if (puff == null)
+                {
+                    continue;
+                }
+                if (puffsVisible == false)
+                {
+                    puff.SetActive(false);
+                    continue;
+                }
+                puff.SetActive(true);
+                Vector3 basePos = new Vector3(
+                    shipPosition.x + cloudPuffOffsets[i].x + cloudDrift * 0.8f,
+                    deckAnchorY + profile.altitude + cloudPuffOffsets[i].y,
+                    shipPosition.z + cloudPuffOffsets[i].z + cloudDrift * 0.5f);
+                puff.transform.position = basePos;
+                puff.transform.localScale = Vector3.one * cloudPuffScales[i];
+                // Billboard: face the camera, keep the baked roll variation.
+                Vector3 toCam = camPos - basePos;
+                if (toCam.sqrMagnitude > 0.01f)
+                {
+                    puff.transform.rotation = Quaternion.LookRotation(toCam.normalized);
+                }
+            }
         }
 
         // Dense haze while the camera is inside the volume: sells being
         // wrapped in cloud. Driven by camera height, not ship height.
-        float distToBand = Mathf.Abs(camY - (deckAnchorY + CloudDeckAltitude));
-        float inside = Mathf.Clamp01(1f - distToBand / (CloudBandHalfThickness + 200f));
+        // Starfield-style whiteout overlay hides the shell pop at crossing.
+        float inside = Mathf.Clamp01(1f - distToBand / (halfThickness + 200f));
         float fogNear = Mathf.Lerp(800f, 60f, inside);
         float fogFar = Mathf.Lerp(7000f, 1800f, inside);
-        SceneFunctions.SetFogDistanceAndColor(fogNear, fogFar, "#D9B98C");
+        SceneFunctions.SetFogDistanceAndColor(fogNear, fogFar, ColorToHex(profile.tint));
+        if (cloudWhiteoutImage != null)
+        {
+            Color wc = cloudWhiteoutImage.color;
+            wc.a = inside * profile.whiteout * 0.85f;
+            cloudWhiteoutImage.color = wc;
+            if (cloudWhiteoutGO != null && cloudWhiteoutGO.activeSelf == false && wc.a > 0.001f)
+            {
+                cloudWhiteoutGO.SetActive(true);
+            }
+        }
     }
 
     private void DestroyCloudDeck()
@@ -773,19 +922,202 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
             cloudMats = null;
         }
-    }
 
-    private static Texture2D GetCloudTexture()
-    {
-        if (cloudTexture != null)
+        if (cloudPuffGOs != null)
         {
-            return cloudTexture;
+            foreach (GameObject puff in cloudPuffGOs)
+            {
+                if (puff != null)
+                {
+                    GameObject.Destroy(puff);
+                }
+            }
+
+            cloudPuffGOs = null;
         }
 
+        cloudPuffOffsets = null;
+        cloudPuffScales = null;
+
+        if (cloudPuffMat != null)
+        {
+            GameObject.Destroy(cloudPuffMat);
+            cloudPuffMat = null;
+        }
+
+        if (cloudWhiteoutGO != null)
+        {
+            cloudWhiteoutGO.SetActive(false);
+        }
+    }
+
+    private void EnsureCloudWhiteout(Color tint)
+    {
+        if (cloudWhiteoutGO != null && cloudWhiteoutImage != null)
+        {
+            cloudWhiteoutImage.color = new Color(tint.r, tint.g, tint.b, 0f);
+            cloudWhiteoutGO.SetActive(false);
+            return;
+        }
+
+        cloudWhiteoutGO = new GameObject("PlanetCloudWhiteout");
+        Canvas canvas = cloudWhiteoutGO.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 110;
+        cloudWhiteoutGO.AddComponent<CanvasScaler>();
+        cloudWhiteoutGO.AddComponent<GraphicRaycaster>();
+
+        GameObject imageGO = new GameObject("WhiteoutImage");
+        imageGO.transform.SetParent(cloudWhiteoutGO.transform, false);
+        RectTransform imageRT = imageGO.AddComponent<RectTransform>();
+        imageRT.anchorMin = Vector2.zero;
+        imageRT.anchorMax = Vector2.one;
+        imageRT.offsetMin = Vector2.zero;
+        imageRT.offsetMax = Vector2.zero;
+        cloudWhiteoutImage = imageGO.AddComponent<Image>();
+        cloudWhiteoutImage.color = new Color(tint.r, tint.g, tint.b, 0f);
+        cloudWhiteoutImage.raycastTarget = false;
+        cloudWhiteoutGO.SetActive(false);
+    }
+
+    // Roof per planetType from PlanetTypes.json. Unknown/missing fields fall
+    // back to the old Tatooine look so existing saves keep working.
+    private static CloudProfile GetCloudProfile(string planetName)
+    {
+        CloudProfile fallback = new CloudProfile
+        {
+            coverage = 0.32f,
+            opacity = 0.34f,
+            tint = DefaultCloudTint,
+            altitude = DefaultCloudAltitude,
+            thickness = DefaultCloudThickness,
+            puffs = 24,
+            whiteout = 0.5f
+        };
+
+        string planetType = GetPlanetTypeName(planetName);
+        PlanetType def = GetPlanetTypeDef(planetType);
+
+        if (def == null)
+        {
+            return fallback;
+        }
+
+        CloudProfile profile = fallback;
+        if (def.cloudCoverage > 0f)
+        {
+            profile.coverage = Mathf.Clamp01(def.cloudCoverage);
+        }
+        if (def.cloudOpacity > 0f)
+        {
+            profile.opacity = Mathf.Clamp01(def.cloudOpacity);
+        }
+        if (string.IsNullOrEmpty(def.cloudTint) == false)
+        {
+            Color tint;
+            if (ColorUtility.TryParseHtmlString(def.cloudTint, out tint))
+            {
+                profile.tint = tint;
+            }
+        }
+        if (def.cloudAltitude > 0f)
+        {
+            profile.altitude = def.cloudAltitude;
+        }
+        if (def.cloudThickness > 0f)
+        {
+            profile.thickness = def.cloudThickness;
+        }
+        if (def.cloudPuffs > 0)
+        {
+            profile.puffs = Mathf.Clamp(def.cloudPuffs, 0, 80);
+        }
+        if (def.cloudWhiteout > 0f)
+        {
+            profile.whiteout = Mathf.Clamp01(def.cloudWhiteout);
+        }
+        return profile;
+    }
+
+    private static string GetPlanetTypeName(string planetName)
+    {
+        TextAsset starSystemFile = Resources.Load(OGGetAddress.files + "StarSystems") as TextAsset;
+
+        if (starSystemFile != null)
+        {
+            StarSystems starSystems = JsonUtility.FromJson<StarSystems>(starSystemFile.text);
+
+            if (starSystems != null && starSystems.starSystemsData != null)
+            {
+                foreach (StarSystem system in starSystems.starSystemsData)
+                {
+                    if (system != null && system.Planet == planetName)
+                    {
+                        return system.planetType;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static PlanetType GetPlanetTypeDef(string planetType)
+    {
+        if (string.IsNullOrEmpty(planetType))
+        {
+            return null;
+        }
+
+        TextAsset planetTypesFile = Resources.Load(OGGetAddress.files + "PlanetTypes") as TextAsset;
+
+        if (planetTypesFile == null)
+        {
+            return null;
+        }
+
+        PlanetTypes planetTypes = JsonUtility.FromJson<PlanetTypes>(planetTypesFile.text);
+
+        if (planetTypes == null || planetTypes.planetTypesData == null)
+        {
+            return null;
+        }
+
+        foreach (PlanetType def in planetTypes.planetTypesData)
+        {
+            if (def != null && string.Equals(def.planetType, planetType, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return def;
+            }
+        }
+
+        return null;
+    }
+
+    private static string ColorToHex(Color color)
+    {
+        Color32 c32 = color;
+        return string.Format("#{0:X2}{1:X2}{2:X2}", c32.r, c32.g, c32.b);
+    }
+
+    private static Texture2D GetCloudTexture(float coverage)
+    {
+        // Bucket the cache so desert/tropical/etc share a handful of textures
+        // instead of one per exact slider value.
+        float bucket = Mathf.Round(coverage * 20f) / 20f;
+        string key = "cloud_" + bucket.ToString("F2");
+        Texture2D cached;
+        if (cloudTextureCache.TryGetValue(key, out cached) && cached != null)
+        {
+            return cached;
+        }
+
+        // Higher coverage -> lower threshold -> more texels survive as cloud.
+        float threshold = 0.68f - Mathf.Clamp01(bucket) * 0.35f;
         const int size = 256;
-        cloudTexture = new Texture2D(size, size, TextureFormat.RGBA32, false);
-        cloudTexture.wrapMode = TextureWrapMode.Mirror;
-        cloudTexture.filterMode = FilterMode.Bilinear;
+        Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Mirror;
+        tex.filterMode = FilterMode.Bilinear;
         Color[] pixels = new Color[size * size];
 
         for (int y = 0; y < size; y++)
@@ -795,15 +1127,16 @@ public class GalaxyPlanetEntry : MonoBehaviour
                 float u = (float)x / size * 4f;
                 float v = (float)y / size * 4f;
                 float fbm = CloudNoise(u, v) * 0.65f + CloudNoise(u * 2.7f + 13f, v * 2.7f + 7f) * 0.35f;
-                float coverage = Mathf.Clamp01((fbm - 0.52f) / 0.25f);
+                float alpha = Mathf.Clamp01((fbm - threshold) / 0.25f);
                 float shade = 0.9f + 0.1f * CloudNoise(u * 5f, v * 5f);
-                pixels[y * size + x] = new Color(shade, shade * 0.99f, shade * 0.97f, coverage * 0.88f);
+                pixels[y * size + x] = new Color(shade, shade * 0.99f, shade * 0.97f, alpha * 0.88f);
             }
         }
 
-        cloudTexture.SetPixels(pixels);
-        cloudTexture.Apply(false, true);
-        return cloudTexture;
+        tex.SetPixels(pixels);
+        tex.Apply(false, true);
+        cloudTextureCache[key] = tex;
+        return tex;
     }
 
     private static float CloudNoise(float x, float y)

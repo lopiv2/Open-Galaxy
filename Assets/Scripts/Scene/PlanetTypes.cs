@@ -41,6 +41,16 @@ public class PlanetType
     public string rockColor;
     public string snowColor;
 
+    // Cloud deck climate (hybrid Elite + Starfield). All optional in JSON:
+    // missing/zero values fall back to code defaults in GalaxyPlanetEntry.
+    public float cloudCoverage;   // 0 = clear, 1 = overcast
+    public float cloudOpacity;    // per-layer alpha multiplier
+    public string cloudTint;      // hex, e.g. "#FFF8F0"
+    public float cloudAltitude;   // deck center height
+    public float cloudThickness;  // band half-thickness * 2
+    public int cloudPuffs;        // billboard puff count inside the band
+    public float cloudWhiteout;   // 0-1 fullscreen haze while inside
+
 }
 
 [System.Serializable]

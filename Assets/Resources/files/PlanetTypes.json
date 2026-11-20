@@ -44,7 +44,7 @@
         },
         {
             "planetType": "desert",
-            "terrainTexture": "sandy",
+            "terrainTexture": "sandy, dune, rock",
             "waterTexture": "terrain",
             "terrainScale": 1,
             "waterScale": 1,

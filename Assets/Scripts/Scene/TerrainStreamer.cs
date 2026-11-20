@@ -22,6 +22,10 @@ public class TerrainStreamer : MonoBehaviour
     [Header("Materials")]
     [SerializeField] private Material terrainMaterial;
     [SerializeField] private Texture2D[] terrainTextures;
+    // Parallel to terrainTextures: per-diffuse normal/AO siblings resolved
+    // by name (foo_d + foo_n + foo_ao). Null entries = no map for that tile.
+    private Texture2D[] terrainNormalMaps;
+    private Texture2D[] terrainOcclusionMaps;
     [SerializeField] private Texture2D cliffTexture;
     [SerializeField] public string terrainTextureType = "forest-mixed";
     [SerializeField] public string cliffTextureType = "cliff01";
@@ -53,6 +57,7 @@ public class TerrainStreamer : MonoBehaviour
     {
         terrainMaterial = LoadBaseMaterial("objects/terrain/material/terrain");
         terrainTextures = LoadTexturesFromResources("objects/terrain/textures/");
+        ResolveMapSiblings(Resources.LoadAll<Texture2D>("objects/terrain/textures/"));
         cliffTexture = LoadCliffTexture("objects/terrain/cliffs/" + cliffTextureType);
 
         if (ship == null)
@@ -131,6 +136,8 @@ public class TerrainStreamer : MonoBehaviour
             sharedOuterMaterial.SetTexture("_GroundMap", outerGround);
             sharedOuterMaterial.SetTexture("_RightGroundMap", outerGround);
             sharedOuterMaterial.SetTexture("_FrontGroundMap", outerGround);
+            sharedOuterMaterial.SetTexture("_GroundNormalMap", terrainNormalMaps.Length > 0 ? terrainNormalMaps[0] : null);
+            sharedOuterMaterial.SetTexture("_GroundOcclusionMap", terrainOcclusionMaps.Length > 0 ? terrainOcclusionMaps[0] : null);
         }
         if (cliffTexture != null)
         {
@@ -202,6 +209,11 @@ public class TerrainStreamer : MonoBehaviour
             if (t == null || string.IsNullOrEmpty(t.name))
                 continue;
 
+            // Normal/AO siblings (foo_n, foo_ao) are never diffuse tiles:
+            // they attach to their foo_d partner via ResolveMapSibling.
+            if (IsMapSiblingName(t.name))
+                continue;
+
             string lowerName = t.name.ToLowerInvariant();
 
             foreach (string kw in cleaned)
@@ -221,6 +233,56 @@ public class TerrainStreamer : MonoBehaviour
         }
 
         return filtered.ToArray();
+    }
+
+    // foo_n / foo_ao / foo_normal / foo_occlusion are map siblings, not tiles.
+    private static bool IsMapSiblingName(string textureName)
+    {
+        string lower = textureName.ToLowerInvariant();
+        return lower.EndsWith("_n") || lower.EndsWith("_ao")
+            || lower.EndsWith("_normal") || lower.EndsWith("_occlusion");
+    }
+
+    // Finds the normal ("n") or occlusion ("ao") partner of a diffuse map:
+    // dunes_d -> dunes_n / dunes_ao, rock -> rock_n / rock_ao.
+    private static Texture2D ResolveMapSibling(Texture2D[] all, string diffuseName, string kind)
+    {
+        string lower = diffuseName.ToLowerInvariant();
+        string baseName = lower.EndsWith("_d") ? diffuseName.Substring(0, diffuseName.Length - 2) : diffuseName;
+        string wanted = (baseName + "_" + kind).ToLowerInvariant();
+
+        foreach (Texture2D t in all)
+        {
+            if (t != null && t.name.ToLowerInvariant() == wanted)
+                return t;
+        }
+
+        return null;
+    }
+
+    // Builds the normal/AO arrays parallel to the filtered diffuse pool.
+    private void ResolveMapSiblings(Texture2D[] all)
+    {
+        terrainNormalMaps = new Texture2D[terrainTextures.Length];
+        terrainOcclusionMaps = new Texture2D[terrainTextures.Length];
+
+        for (int i = 0; i < terrainTextures.Length; i++)
+        {
+            if (terrainTextures[i] == null)
+                continue;
+
+            terrainNormalMaps[i] = ResolveMapSibling(all, terrainTextures[i].name, "n");
+            terrainOcclusionMaps[i] = ResolveMapSibling(all, terrainTextures[i].name, "ao");
+        }
+    }
+
+    // Current-tile maps: diffuse + its normal/AO siblings. Missing maps fall
+    // back to the shader defaults ("bump" neutral normal, "white" AO).
+    private void SetTileGroundMaps(Material material, int index)
+    {
+        material.SetTexture("_GroundMap", terrainTextures[index]);
+        material.SetTexture("_GroundNormalMap", index < terrainNormalMaps.Length ? terrainNormalMaps[index] : null);
+        material.SetTexture("_GroundOcclusionMap", index < terrainOcclusionMaps.Length ? terrainOcclusionMaps[index] : null);
     }
 
     private Material LoadBaseMaterial(string materialPath)
@@ -324,7 +386,7 @@ public class TerrainStreamer : MonoBehaviour
 
         // Use deterministic selection for the final texture
         int finalIndex = GetFinalTextureIndex(coordinate);
-        materialInstance.SetTexture("_GroundMap", terrainTextures[finalIndex]);
+        SetTileGroundMaps(materialInstance, finalIndex);
 
         // Set neighbor textures for blending (uses same deterministic selection)
         SetNeighborTextures(materialInstance, coordinate);

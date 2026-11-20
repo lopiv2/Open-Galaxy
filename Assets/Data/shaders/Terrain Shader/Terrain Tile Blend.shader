@@ -6,6 +6,12 @@
         _GroundMap ("Ground", 2D) = "white" {}
         _CliffMap ("Shared Cliff", 2D) = "gray" {}
 
+        [Header(Surface Detail)]
+        _GroundNormalMap ("Ground Normal", 2D) = "bump" {}
+        _GroundOcclusionMap ("Ground Occlusion", 2D) = "white" {}
+        _OcclusionStrength ("Occlusion Strength", Range(0, 1)) = 1
+        _BumpScale ("Normal Strength", Range(0, 2)) = 1
+
         [Header(Neighbor Ground Textures)]
         _RightGroundMap ("Right Ground", 2D) = "white" {}
         _FrontGroundMap ("Front Ground", 2D) = "white" {}
@@ -68,6 +74,12 @@
             TEXTURE2D(_FrontGroundMap);
             SAMPLER(sampler_FrontGroundMap);
 
+            TEXTURE2D(_GroundNormalMap);
+            SAMPLER(sampler_GroundNormalMap);
+
+            TEXTURE2D(_GroundOcclusionMap);
+            SAMPLER(sampler_GroundOcclusionMap);
+
             CBUFFER_START(UnityPerMaterial)
 
                 half _BorderBlend;
@@ -80,6 +92,9 @@
 
                 half _TextureTiling;
                 half _Brightness;
+
+                half _OcclusionStrength;
+                half _BumpScale;
 
 
             CBUFFER_END
@@ -263,9 +278,55 @@
     return color;
 }
 
+            // Normal mapping without a tangent stream: builds the TBN frame
+            // from screen-space derivatives (standard technique for
+            // generated meshes). Missing map = neutral via "bump" default.
+            half3 PerturbGroundNormal(
+                half3 positionWS,
+                half3 normalWS,
+                float2 uv)
+            {
+                half3 mapN = UnpackNormal(
+                    SAMPLE_TEXTURE2D(
+                        _GroundNormalMap,
+                        sampler_GroundNormalMap,
+                        uv
+                    )
+                );
+
+                mapN.xy *= _BumpScale;
+
+                half3 q0 = ddx(positionWS);
+                half3 q1 = ddy(positionWS);
+                half2 st0 = ddx(uv);
+                half2 st1 = ddy(uv);
+
+                half3 N = normalize(normalWS);
+                half3 T = normalize(q0 * st1.y - q1 * st0.y);
+                half3 B = -normalize(cross(N, T));
+                half3x3 TBN = half3x3(T, B, N);
+
+                return normalize(mul(mapN, TBN));
+            }
+
+            half GroundOcclusion(float2 uv)
+            {
+                half ao = SAMPLE_TEXTURE2D(
+                    _GroundOcclusionMap,
+                    sampler_GroundOcclusionMap,
+                    uv
+                ).g;
+
+                return lerp(1.0h, ao, _OcclusionStrength);
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
-                half3 normalWS = normalize(input.normalWS);
+                half3 normalWS = PerturbGroundNormal(
+                    input.positionWS,
+                    normalize(input.normalWS),
+                    input.uv
+                );
 
                 // Horizontal surfaces have normal.y near 1.
                 // Vertical surfaces have normal.y near 0.
@@ -286,6 +347,9 @@
                     input.positionWS,
                     groundColor
                 );
+
+                // Baked crevice shadowing from the AO map (ground only).
+                groundColor *= GroundOcclusion(input.uv);
 
                 // One shared cliff texture is used everywhere.
                 half3 cliffColor =

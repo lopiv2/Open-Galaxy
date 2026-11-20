@@ -19,6 +19,9 @@ public class PlanetNavigation : MonoBehaviour
     private readonly List<GameObject> beacons = new List<GameObject>();
     private readonly List<float> poiGroundY = new List<float>();
     private readonly HashSet<string> visited = new HashSet<string>();
+    // Props registered as R-targets (removed from the pool on cleanup).
+    private readonly List<GameObject> propObjects = new List<GameObject>();
+    private Scene boundScene;
     private int targetIndex = -1;
     private float hudTimer;
 
@@ -49,6 +52,7 @@ public class PlanetNavigation : MonoBehaviour
         go.transform.localPosition = Vector3.zero;
         PlanetNavigation nav = go.AddComponent<PlanetNavigation>();
         nav.planetName = planetName;
+        nav.boundScene = scene;
         active = nav;
     }
 
@@ -64,6 +68,20 @@ public class PlanetNavigation : MonoBehaviour
 
         if (active != null)
         {
+            // Unregister prop targets before destroying them.
+            if (active.boundScene != null && active.boundScene.objectPool != null)
+            {
+                foreach (GameObject prop in active.propObjects)
+                {
+                    if (prop != null)
+                    {
+                        active.boundScene.objectPool.Remove(prop);
+                    }
+                }
+            }
+
+            active.propObjects.Clear();
+
             foreach (GameObject beacon in active.beacons)
             {
                 if (beacon != null)
@@ -207,6 +225,13 @@ public class PlanetNavigation : MonoBehaviour
                 float lift = (scene.transform.position.y + groundY) - bb.min.y;
                 go.transform.position += Vector3.up * lift;
                 beacons.Add(go);
+                // Selectable with R like any ship (enemy lock-ons skip it:
+                // no Ship component, no allegiance).
+                if (scene.objectPool != null && !scene.objectPool.Contains(go))
+                {
+                    scene.objectPool.Add(go);
+                }
+                propObjects.Add(go);
             }
         }
 

@@ -168,6 +168,15 @@ public static class TargetingSystemFunctions
                                 targetingSystem.targetLargeShip = targetLargeShip;
                                 targetingSystem.targetPrefabName = targetLargeShip.prefabName;
                             }
+                            else
+                            {
+                                // Static props (no Ship/LargeShip): keep the
+                                // GameObject target, drop stale ship data so
+                                // the HUD doesn't show the previous ship.
+                                targetingSystem.targetShip = null;
+                                targetingSystem.targetLargeShip = null;
+                                targetingSystem.targetPrefabName = " ";
+                            }
 
                             targetingSystem.targetRigidbody = scene.objectPool[i].GetComponent<Rigidbody>();
                             targetingSystem.targetNumber = i;

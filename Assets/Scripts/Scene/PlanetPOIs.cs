@@ -1,0 +1,25 @@
+[System.Serializable]
+public class PlanetPOIEntry
+{
+    public string name;
+    public float x;
+    public float z;
+    public float radius;
+}
+
+[System.Serializable]
+public class PlanetPOILocation
+{
+    public string planet;
+    // Entry gate: deterministic spawn XZ in planet-local meters. All POIs
+    // are offsets in this same frame (scene-local XZ while on planet).
+    public float entryX;
+    public float entryZ;
+    public PlanetPOIEntry[] pois;
+}
+
+[System.Serializable]
+public class PlanetPOIs
+{
+    public PlanetPOILocation[] planetPOIsData;
+}

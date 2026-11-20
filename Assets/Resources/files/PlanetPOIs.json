@@ -1,0 +1,29 @@
+{
+    "planetPOIsData": [
+        {
+            "planet": "Tatooine",
+            "entryX": 0.0,
+            "entryZ": 0.0,
+            "pois": [
+                {
+                    "name": "MOS EISLEY",
+                    "x": 2200.0,
+                    "z": 1600.0,
+                    "radius": 500.0
+                },
+                {
+                    "name": "ANCHORHEAD",
+                    "x": -2200.0,
+                    "z": 1700.0,
+                    "radius": 400.0
+                },
+                {
+                    "name": "TOSCHE STATION",
+                    "x": 600.0,
+                    "z": -2200.0,
+                    "radius": 300.0
+                }
+            ]
+        }
+    ]
+}

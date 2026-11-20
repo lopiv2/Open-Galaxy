@@ -366,14 +366,17 @@ public class GalaxyPlanetEntry : MonoBehaviour
         yield return null;
         yield return new WaitForFixedUpdate();
 
+        // Planet frame: deterministic gate spawn so POIs are persistent.
+        Vector2 gate = PlanetNavigation.GetEntryGate(cachedLocation);
         float entryAltitude = scene.transform.position.y + activeCloud.altitude + EntryAltitudeAboveClouds;
-        Vector3 shipPos = mainShip.transform.position;
-        float groundAtSpawn = SampleGroundHeight(new Vector3(shipPos.x, entryAltitude + 1000f, shipPos.z));
+        float groundAtSpawn = SampleGroundHeight(new Vector3(gate.x, entryAltitude + 1000f, gate.y));
         float safeAltitude = float.IsNaN(groundAtSpawn)
             ? entryAltitude
             : Mathf.Max(entryAltitude, groundAtSpawn + EntryAltitudeMargin);
-        mainShip.transform.position = new Vector3(shipPos.x, safeAltitude, shipPos.z);
+        mainShip.transform.position = new Vector3(gate.x, safeAltitude, gate.y);
         Debug.Log("[PlanetDiag] spawned at " + mainShip.transform.position + " (ground " + groundAtSpawn + ").");
+
+        PlanetNavigation.BeginForPlanet(scene, cachedLocation);
 
         yield return FadeTo(new Color(EntryFadeColorR, EntryFadeColorG, EntryFadeColorB, 0f), 0.8f);
 
@@ -630,6 +633,8 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
     private void DestroyTerrain()
     {
+        PlanetNavigation.EndAll();
+
         if (streamer != null)
         {
             streamer.enabled = false;

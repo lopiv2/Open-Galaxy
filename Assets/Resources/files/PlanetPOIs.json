@@ -29,7 +29,8 @@
                     "prefab": "Sandcrawler",
                     "x": 1850.0,
                     "z": 1350.0,
-                    "rotY": 35.0
+                    "rotY": 35.0,
+                    "scale": 1.74
                 }
             ]
         }

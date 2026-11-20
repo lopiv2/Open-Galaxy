@@ -14,6 +14,8 @@ public class PlanetPOIProp
     public float x;
     public float z;
     public float rotY;
+    // Art-direction multiplier on top of the VehiclesTypes targetLength.
+    public float scale = 1f;
 }
 
 [System.Serializable]

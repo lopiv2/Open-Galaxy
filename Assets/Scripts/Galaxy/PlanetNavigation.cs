@@ -232,6 +232,11 @@ public class PlanetNavigation : MonoBehaviour
                         go.transform.localScale *= vehicleDef.targetLength / longest;
                     }
                 }
+
+                if (prop.scale > 0f)
+                {
+                    go.transform.localScale *= prop.scale;
+                }
                 // Ground by bounds, not pivot: model origins are arbitrary
                 // (the Sandcrawler hangs ~16 m below its own pivot).
                 // Y-rotation keeps Y extents, so one lift is exact.

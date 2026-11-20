@@ -1,0 +1,10 @@
+{
+    "vehicleTypesData": [
+        {
+            "type": "Sandcrawler",
+            "displayName": "Sandcrawler",
+            "prefab": "Sandcrawler",
+            "targetLength": 37.0
+        }
+    ]
+}

@@ -218,6 +218,20 @@ public class PlanetNavigation : MonoBehaviour
                     scene.transform.position.y + groundY,
                     scene.transform.position.z + prop.z);
                 go.transform.rotation = Quaternion.Euler(0f, prop.rotY, 0f);
+                // Canon scale from VehiclesTypes.json: longest horizontal
+                // extent matches targetLength (native FBX sizes vary).
+                VehicleType vehicleDef = GetVehicleDef(prop.prefab);
+
+                if (vehicleDef != null && vehicleDef.targetLength > 0f)
+                {
+                    Bounds rawBounds = GetPropBounds(go);
+                    float longest = Mathf.Max(rawBounds.size.x, rawBounds.size.z);
+
+                    if (longest > 0.01f)
+                    {
+                        go.transform.localScale *= vehicleDef.targetLength / longest;
+                    }
+                }
                 // Ground by bounds, not pivot: model origins are arbitrary
                 // (the Sandcrawler hangs ~16 m below its own pivot).
                 // Y-rotation keeps Y extents, so one lift is exact.
@@ -550,6 +564,43 @@ public class PlanetNavigation : MonoBehaviour
             if (loc != null && loc.planet == planetName)
             {
                 return loc;
+            }
+        }
+
+        return null;
+    }
+
+    private static VehicleTypes cachedVehicles;
+
+    private static VehicleType GetVehicleDef(string prefabName)
+    {
+        if (string.IsNullOrEmpty(prefabName))
+        {
+            return null;
+        }
+
+        if (cachedVehicles == null)
+        {
+            TextAsset file = Resources.Load(OGGetAddress.files + "VehiclesTypes") as TextAsset;
+
+            if (file == null)
+            {
+                return null;
+            }
+
+            cachedVehicles = JsonUtility.FromJson<VehicleTypes>(file.text);
+        }
+
+        if (cachedVehicles == null || cachedVehicles.vehicleTypesData == null)
+        {
+            return null;
+        }
+
+        foreach (VehicleType def in cachedVehicles.vehicleTypesData)
+        {
+            if (def != null && def.prefab == prefabName)
+            {
+                return def;
             }
         }
 

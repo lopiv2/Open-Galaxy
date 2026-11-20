@@ -29192,6 +29192,7 @@
             "planetPrefab": "tatooine",
             "faction": "independent",
             "planetDistance": 50.0,
+            "terrainTexture": "sandy",
             "cloudCoverage": 0.32,
             "cloudOpacity": 0.34,
             "cloudTint": "#FFF8F0",

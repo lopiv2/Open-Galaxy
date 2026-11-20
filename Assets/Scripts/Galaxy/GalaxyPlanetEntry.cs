@@ -408,7 +408,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
         streamer.seed = seed;
         streamer.ship = scene.mainShip.transform;
         streamer.tileParent = terrainGO.transform;
-        streamer.terrainTextureType = "sandy";
+        // Ground textures from JSON: per-planet override wins, then the
+        // planetType climate default, then the legacy "sandy" fallback so
+        // Tatooine looks identical until new textures are added.
+        streamer.terrainTextureType = GetTerrainTextureKeywords(scene.currentLocation);
         streamer.tileRadiusInKilometres = 3;
         // Distant ring to the horizon: fogged out, hides the terrain edge.
         streamer.outerTileRadiusInKilometres = 8;
@@ -1101,6 +1104,28 @@ public class GalaxyPlanetEntry : MonoBehaviour
         cloudWhiteoutImage.color = new Color(tint.r, tint.g, tint.b, 0f);
         cloudWhiteoutImage.raycastTarget = false;
         cloudWhiteoutGO.SetActive(false);
+    }
+
+    // Ground texture keywords from JSON. Priority: StarSystems per-planet
+    // override > PlanetTypes climate default > legacy "sandy" fallback.
+    private static string GetTerrainTextureKeywords(string planetName)
+    {
+        StarSystem system = GetStarSystem(planetName);
+
+        if (system != null && string.IsNullOrEmpty(system.terrainTexture) == false)
+        {
+            return system.terrainTexture;
+        }
+
+        string planetType = system != null ? system.planetType : null;
+        PlanetType def = GetPlanetTypeDef(planetType);
+
+        if (def != null && string.IsNullOrEmpty(def.terrainTexture) == false)
+        {
+            return def.terrainTexture;
+        }
+
+        return "sandy";
     }
 
     // Roof per planetType from PlanetTypes.json. Unknown/missing fields fall

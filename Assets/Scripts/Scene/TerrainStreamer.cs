@@ -173,10 +173,28 @@ public class TerrainStreamer : MonoBehaviour
             return new Texture2D[0];
         }
 
+        // terrainTextureType accepts a comma/semicolon-separated keyword list:
+        // a texture matches if its name contains ANY keyword ("sandy, dune").
+        // A single keyword ("sandy") behaves exactly like before.
         if (string.IsNullOrWhiteSpace(terrainTextureType))
             return textures;
 
-        string kw = terrainTextureType.Trim().ToLowerInvariant();
+        string[] keywords = terrainTextureType.Split(new char[] { ',', ';' }, System.StringSplitOptions.RemoveEmptyEntries);
+        List<string> cleaned = new List<string>(keywords.Length);
+
+        foreach (string raw in keywords)
+        {
+            string kw = raw.Trim().ToLowerInvariant();
+
+            if (string.IsNullOrEmpty(kw) == false)
+            {
+                cleaned.Add(kw);
+            }
+        }
+
+        if (cleaned.Count == 0)
+            return textures;
+
         List<Texture2D> filtered = new List<Texture2D>(textures.Length);
 
         foreach (Texture2D t in textures)
@@ -184,8 +202,16 @@ public class TerrainStreamer : MonoBehaviour
             if (t == null || string.IsNullOrEmpty(t.name))
                 continue;
 
-            if (t.name.ToLowerInvariant().Contains(kw))
-                filtered.Add(t);
+            string lowerName = t.name.ToLowerInvariant();
+
+            foreach (string kw in cleaned)
+            {
+                if (lowerName.Contains(kw))
+                {
+                    filtered.Add(t);
+                    break;
+                }
+            }
         }
 
         if (filtered.Count == 0)

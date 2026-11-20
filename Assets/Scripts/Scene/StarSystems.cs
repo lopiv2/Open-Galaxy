@@ -17,6 +17,10 @@ public class StarSystem
     public string SystemSunType;
     public string planetType;
     public string planetPrefab;
+    // Optional per-planet terrain texture keywords (StarSystems.json).
+    // Comma-separated, matched against texture names in
+    // Resources/objects/terrain/textures. Empty = inherit from PlanetTypes.
+    public string terrainTexture;
     // Optional per-planet cloud roof override (StarSystems.json). Zero/empty
     // means "use the PlanetTypes.json climate defaults for planetType".
     public float cloudCoverage;

@@ -1,0 +1,18 @@
+{
+    "propTypesData": [
+        {
+            "type": "Sandcrawler",
+            "displayName": "Sandcrawler",
+            "folder": "objects/vehicles/",
+            "prefab": "Sandcrawler",
+            "targetLength": 40.0
+        },
+        {
+            "type": "TatooineHouse",
+            "displayName": "Tatooine House",
+            "folder": "objects/buildings/",
+            "prefab": "TatooineHouse",
+            "targetLength": 12.0
+        }
+    ]
+}

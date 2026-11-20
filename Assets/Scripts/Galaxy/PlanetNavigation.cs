@@ -173,88 +173,174 @@ public class PlanetNavigation : MonoBehaviour
                     continue;
                 }
 
-                float groundY = float.NaN;
-                float waited = 0f;
+                // Swarm mode: several instances scattered in a disc around
+                // (x, z) with a deterministic seed. count <= 1 keeps the
+                // classic single placement.
+                int count = Mathf.Max(prop.count, 1);
+                System.Random rng = new System.Random(prop.seed);
+                List<Vector2> accepted = new List<Vector2>();
 
-                while (float.IsNaN(groundY) && waited < 20f)
+                for (int n = 0; n < count; n++)
                 {
-                    Vector3 probe = new Vector3(
-                        scene.transform.position.x + prop.x,
-                        2000f,
-                        scene.transform.position.z + prop.z);
-                    groundY = SampleGroundHeight(probe);
-                    if (float.IsNaN(groundY))
-                    {
-                        waited += 0.5f;
-                        yield return new WaitForSeconds(0.5f);
-                        scene = SceneFunctions.GetScene();
+                    float px = prop.x;
+                    float pz = prop.z;
 
-                        if (scene == null)
+                    if (count > 1 && prop.radius > 0f)
+                    {
+                        bool placed = false;
+
+                        for (int attempt = 0; attempt < 24 && !placed; attempt++)
                         {
-                            yield break;
+                            double ang = rng.NextDouble() * Mathf.PI * 2.0;
+                            double rad = prop.radius * System.Math.Sqrt(rng.NextDouble());
+                            Vector2 candidate = new Vector2(
+                                prop.x + (float)(System.Math.Cos(ang) * rad),
+                                prop.z + (float)(System.Math.Sin(ang) * rad));
+                            placed = true;
+
+                            foreach (Vector2 other in accepted)
+                            {
+                                if (Vector2.Distance(candidate, other) < Mathf.Max(prop.minDist, 1f))
+                                {
+                                    placed = false;
+                                    break;
+                                }
+                            }
+
+                            if (placed)
+                            {
+                                px = candidate.x;
+                                pz = candidate.y;
+                            }
                         }
+
+                        if (!placed)
+                        {
+                            Debug.LogWarning("[PlanetNav] No room for prop " + prop.prefab + " #" + n + ", skipped.");
+                            continue;
+                        }
+
+                        accepted.Add(new Vector2(px, pz));
                     }
-                }
 
-                if (float.IsNaN(groundY))
-                {
-                    Debug.LogWarning("[PlanetNav] No ground for prop " + prop.prefab + ", skipped.");
-                    continue;
-                }
+                    float rotY = prop.rotY;
 
-                GameObject prefab = Resources.Load<GameObject>("objects/vehicles/" + prop.prefab);
-
-                if (prefab == null)
-                {
-                    Debug.LogWarning("[PlanetNav] Prop prefab not found: " + prop.prefab);
-                    continue;
-                }
-
-                GameObject go = GameObject.Instantiate(prefab);
-                go.name = "POIProp_" + prop.prefab;
-                go.transform.SetParent(scene.transform, true);
-                go.transform.position = new Vector3(
-                    scene.transform.position.x + prop.x,
-                    scene.transform.position.y + groundY,
-                    scene.transform.position.z + prop.z);
-                go.transform.rotation = Quaternion.Euler(0f, prop.rotY, 0f);
-                // Canon scale from VehiclesTypes.json: longest horizontal
-                // extent matches targetLength (native FBX sizes vary).
-                VehicleType vehicleDef = GetVehicleDef(prop.prefab);
-
-                if (vehicleDef != null && vehicleDef.targetLength > 0f)
-                {
-                    Bounds rawBounds = GetPropBounds(go);
-                    float longest = Mathf.Max(rawBounds.size.x, rawBounds.size.z);
-
-                    if (longest > 0.01f)
+                    if (prop.randomYaw)
                     {
-                        go.transform.localScale *= vehicleDef.targetLength / longest;
+                        rotY = (float)(rng.NextDouble() * 360.0);
+                    }
+
+                    float scaleMul = Mathf.Approximately(prop.scale, 0f) ? 1f : prop.scale;
+
+                    if (prop.scaleVar > 0f)
+                    {
+                        scaleMul *= 1f + ((float)rng.NextDouble() * 2f - 1f) * prop.scaleVar;
+                    }
+
+                    yield return StartCoroutine(SpawnPropInstance(prop, px, pz, rotY, scaleMul));
+                    scene = SceneFunctions.GetScene();
+
+                    if (scene == null)
+                    {
+                        yield break;
                     }
                 }
-
-                if (prop.scale > 0f)
-                {
-                    go.transform.localScale *= prop.scale;
-                }
-                // Ground by bounds, not pivot: model origins are arbitrary
-                // (the Sandcrawler hangs ~16 m below its own pivot).
-                // Y-rotation keeps Y extents, so one lift is exact.
-                Bounds bb = GetPropBounds(go);
-                float lift = (scene.transform.position.y + groundY) - bb.min.y;
-                go.transform.position += Vector3.up * lift;
-                beacons.Add(go);
-                // Selectable with R like any ship (enemy lock-ons skip it:
-                // no Ship component, no allegiance).
-                if (scene.objectPool != null && !scene.objectPool.Contains(go))
-                {
-                    scene.objectPool.Add(go);
-                }
-                propObjects.Add(go);
             }
         }
 
         RetargetNearest(true);
+    }
+
+    // Waits for the tile under (x, z), then spawns one ground-clamped prop.
+    private IEnumerator SpawnPropInstance(PlanetPOIProp prop, float x, float z, float rotY, float scaleMul)
+    {
+        Scene scene = SceneFunctions.GetScene();
+
+        if (scene == null)
+        {
+            yield break;
+        }
+
+        float groundY = float.NaN;
+        float waited = 0f;
+
+        while (float.IsNaN(groundY) && waited < 20f)
+        {
+            Vector3 probe = new Vector3(
+                scene.transform.position.x + x,
+                2000f,
+                scene.transform.position.z + z);
+            groundY = SampleGroundHeight(probe);
+            if (float.IsNaN(groundY))
+            {
+                waited += 0.5f;
+                yield return new WaitForSeconds(0.5f);
+                scene = SceneFunctions.GetScene();
+
+                if (scene == null)
+                {
+                    yield break;
+                }
+            }
+        }
+
+        if (float.IsNaN(groundY))
+        {
+            Debug.LogWarning("[PlanetNav] No ground for prop " + prop.prefab + ", skipped.");
+            yield break;
+        }
+
+        GameObject prefab = null;
+        PropType propDef = GetPropDef(prop.prefab);
+        string prefabFolder = (propDef != null && !string.IsNullOrEmpty(propDef.folder))
+            ? propDef.folder
+            : "objects/vehicles/";
+
+        prefab = Resources.Load<GameObject>(prefabFolder + prop.prefab);
+
+        if (prefab == null)
+        {
+            Debug.LogWarning("[PlanetNav] Prop prefab not found: " + prop.prefab);
+            yield break;
+        }
+
+        GameObject go = GameObject.Instantiate(prefab);
+        go.name = "POIProp_" + prop.prefab;
+        go.transform.SetParent(scene.transform, true);
+        go.transform.position = new Vector3(
+            scene.transform.position.x + x,
+            scene.transform.position.y + groundY,
+            scene.transform.position.z + z);
+        go.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
+        // Canon scale from PropsTypes.json: longest horizontal
+        // extent matches targetLength (native FBX sizes vary).
+        if (propDef != null && propDef.targetLength > 0f)
+        {
+            Bounds rawBounds = GetPropBounds(go);
+            float longest = Mathf.Max(rawBounds.size.x, rawBounds.size.z);
+
+            if (longest > 0.01f)
+            {
+                go.transform.localScale *= propDef.targetLength / longest;
+            }
+        }
+
+        go.transform.localScale *= scaleMul;
+        // Ground by bounds, not pivot: model origins are arbitrary
+        // (the Sandcrawler hangs ~16 m below its own pivot).
+        // Y-rotation keeps Y extents, so one lift is exact.
+        Bounds bb = GetPropBounds(go);
+        float lift = (scene.transform.position.y + groundY) - bb.min.y;
+        go.transform.position += Vector3.up * lift;
+        beacons.Add(go);
+        // Selectable with R like any ship (enemy lock-ons skip it:
+        // no Ship component, no allegiance).
+        if (scene.objectPool != null && !scene.objectPool.Contains(go))
+        {
+            scene.objectPool.Add(go);
+        }
+
+        propObjects.Add(go);
     }
 
     private void Update()
@@ -575,33 +661,33 @@ public class PlanetNavigation : MonoBehaviour
         return null;
     }
 
-    private static VehicleTypes cachedVehicles;
+    private static PropTypes cachedProps;
 
-    private static VehicleType GetVehicleDef(string prefabName)
+    private static PropType GetPropDef(string prefabName)
     {
         if (string.IsNullOrEmpty(prefabName))
         {
             return null;
         }
 
-        if (cachedVehicles == null)
+        if (cachedProps == null)
         {
-            TextAsset file = Resources.Load(OGGetAddress.files + "VehiclesTypes") as TextAsset;
+            TextAsset file = Resources.Load(OGGetAddress.files + "PropsTypes") as TextAsset;
 
             if (file == null)
             {
                 return null;
             }
 
-            cachedVehicles = JsonUtility.FromJson<VehicleTypes>(file.text);
+            cachedProps = JsonUtility.FromJson<PropTypes>(file.text);
         }
 
-        if (cachedVehicles == null || cachedVehicles.vehicleTypesData == null)
+        if (cachedProps == null || cachedProps.propTypesData == null)
         {
             return null;
         }
 
-        foreach (VehicleType def in cachedVehicles.vehicleTypesData)
+        foreach (PropType def in cachedProps.propTypesData)
         {
             if (def != null && def.prefab == prefabName)
             {

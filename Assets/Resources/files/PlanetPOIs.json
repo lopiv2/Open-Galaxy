@@ -30,7 +30,20 @@
                     "x": 1850.0,
                     "z": 1350.0,
                     "rotY": 35.0,
-                    "scale": 1.74
+                    "scale": 1
+                },
+                {
+                    "prefab": "TatooineHouse",
+                    "x": 2350.0,
+                    "z": 1750.0,
+                    "rotY": 0.0,
+                    "scale": 1.0,
+                    "count": 12,
+                    "radius": 320.0,
+                    "seed": 7,
+                    "randomYaw": true,
+                    "scaleVar": 0.15,
+                    "minDist": 45.0
                 }
             ]
         }

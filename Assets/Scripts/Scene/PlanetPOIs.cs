@@ -16,6 +16,14 @@ public class PlanetPOIProp
     public float rotY;
     // Art-direction multiplier on top of the VehiclesTypes targetLength.
     public float scale = 1f;
+    // Swarm mode: count instances scattered in a disc of radius (meters)
+    // around (x, z). count <= 1 keeps the classic single placement.
+    public int count = 1;
+    public float radius = 0f;
+    public int seed = 1;
+    public bool randomYaw = false;
+    public float scaleVar = 0f;
+    public float minDist = 30f;
 }
 
 [System.Serializable]

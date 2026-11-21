@@ -1454,7 +1454,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         return bestHeight;
     }
 
-    private static bool GetActivePlanet(Scene scene, out GameObject planet, out Vector3 center, out float radius)
+    public static bool GetActivePlanet(Scene scene, out GameObject planet, out Vector3 center, out float radius)
     {
         planet = null;
         center = Vector3.zero;

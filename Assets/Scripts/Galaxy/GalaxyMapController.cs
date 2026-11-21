@@ -473,6 +473,7 @@ public class GalaxyMapController : MonoBehaviour
         string planetPrefab = GalaxyModeFunctions.GetPlanetPrefabForSystemPublic(destination);
         SceneFunctions.GeneratePlanet(planetPrefab, "none", true, GalaxyModeFunctions.GetPlanetDistanceForSystem(destination), 0, 0, 0, 0, 0, 0);
         GalaxySunFunctions.SpawnSunsForSystem(destination);
+        GalaxyModeFunctions.SpawnDescentBeacon();
         scene.currentLocation = destination;
         scene.availibleLocations = new List<string> { destination };
 

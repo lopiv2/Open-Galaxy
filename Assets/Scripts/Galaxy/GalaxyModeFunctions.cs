@@ -353,6 +353,9 @@ public static class GalaxyModeFunctions
         SceneFunctions.LoadSingleShip(new Vector3(500, 100, 500), Quaternion.Euler(0, 180, 0), shipType, "escort01", allegiance, "no cargo", false, true, false, playerLaser, true);
         SceneFunctions.LoadSingleShip(new Vector3(-600, -50, 800), Quaternion.Euler(0, 180, 0), "tiefighter", "hostile01", "hostile", "no cargo", false, true, false, "red", true);
 
+        // Neutral targetable beacon marking the planet descent point.
+        SpawnDescentBeacon();
+
         yield return null;
 
         OGCameraFunctions.ActivateOGCamera();
@@ -371,6 +374,60 @@ public static class GalaxyModeFunctions
 
         HudFunctions.AddToMissionLog("Galaxy Mode: " + planetName + " - free roam");
         HudFunctions.AddToMissionLog("Press M to open the galaxy map and jump to another system.");
+    }
+
+    // Neutral targetable descent beacon (independent navbuoy) marking where to
+    // fly to descend onto the current planet. Respawned per system; the
+    // hyperspace jump clears the old one via ClearLocation.
+    public static void SpawnDescentBeacon()
+    {
+        Scene scene = SceneFunctions.GetScene();
+
+        if (scene == null || scene.mainShip == null)
+        {
+            return;
+        }
+
+        GameObject planet;
+        Vector3 center;
+        float radius;
+
+        if (GalaxyPlanetEntry.GetActivePlanet(scene, out planet, out center, out radius) == false || radius <= 0f)
+        {
+            return;
+        }
+
+        Vector3 dir = scene.mainShip.transform.position - center;
+
+        if (dir.sqrMagnitude < 0.001f)
+        {
+            dir = new Vector3(0f, 0f, -1f);
+        }
+
+        dir.Normalize();
+
+        // Inside the 120 m entry prompt range so reaching it always shows "Press X".
+        Vector3 beaconPos = center + dir * (radius + 60f);
+
+        string beaconName = string.IsNullOrEmpty(scene.currentLocation) ? "Beacon" : scene.currentLocation + " Beacon";
+
+        SceneFunctions.LoadSingleShip(beaconPos, Quaternion.identity, "navbuoy", beaconName, "independent", "no cargo", false, true, true, "red", true);
+
+        GameObject beacon = SceneFunctions.FindShip("nav-" + beaconName);
+
+        if (beacon != null)
+        {
+            LargeShip largeShip = beacon.GetComponent<LargeShip>();
+
+            if (largeShip != null)
+            {
+                // Neutral marker: no drift, no AI, cannot be destroyed.
+                largeShip.shipClass = "buoy";
+                largeShip.invincible = true;
+            }
+
+            HudFunctions.AddToMissionLog("Descent beacon deployed - target it with R");
+        }
     }
 
     private static Dictionary<string, string> factionDisplayNames;

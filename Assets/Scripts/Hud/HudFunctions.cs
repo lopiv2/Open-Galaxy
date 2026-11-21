@@ -522,6 +522,203 @@ public static class HudFunctions
         }
     }
 
+    //This displays an arrow on the screen edge pointing to the target when it is offscreen.
+    //Ported from Hud_Old.DisplaySelectionBraces (DirectionArrow); the old HUD is no longer instantiated.
+    public static void DisplayTargetArrow(Hud hud)
+    {
+        if (hud.mainShip == null)
+        {
+            return;
+        }
+
+        if (hud.mainCamera == null)
+        {
+            OGCamera ogCamera = OGCameraFunctions.GetOGCamera();
+
+            if (ogCamera != null)
+            {
+                hud.mainCamera = ogCamera.mainCamera.GetComponent<Camera>();
+            }
+        }
+
+        if (hud.arrowTarget == null)
+        {
+            hud.arrowTarget = GameObject.Find("Arrow_Target");
+
+            if (hud.arrowTarget != null)
+            {
+                hud.arrowTarget.SetActive(false);
+            }
+        }
+
+        if (hud.arrowTarget == null || hud.mainCamera == null || Time.timeScale == 0)
+        {
+            return;
+        }
+
+        GameObject target = null;
+
+        if (hud.mainShip.targetingSystem != null)
+        {
+            target = hud.mainShip.targetingSystem.target;
+        }
+
+        GameObject mainShip = hud.mainShip.gameObject;
+
+        if (target == null || target.activeSelf == false)
+        {
+            hud.arrowTarget.SetActive(false);
+            return;
+        }
+
+        Renderer targetRenderer = target.GetComponentInChildren<Renderer>();
+        Vector3 toTarget = target.transform.position - mainShip.transform.position;
+
+        if (toTarget.sqrMagnitude < 0.001f)
+        {
+            hud.arrowTarget.SetActive(false);
+            return;
+        }
+
+        float forward = Vector3.Dot(mainShip.transform.forward, toTarget.normalized);
+        bool visible = targetRenderer != null && IsInCameraView(hud.mainCamera, targetRenderer) && forward > 0;
+
+        if (visible)
+        {
+            hud.arrowTarget.SetActive(false);
+            return;
+        }
+
+        hud.arrowTarget.SetActive(true);
+
+        if (hud.arrowCanvasGroup == null)
+        {
+            hud.arrowCanvasGroup = hud.arrowTarget.GetComponent<CanvasGroup>();
+        }
+
+        // The arrow ships with a CanvasGroup at alpha 0 in the prefab; enable it explicitly.
+        if (hud.arrowCanvasGroup != null)
+        {
+            hud.arrowCanvasGroup.alpha = 1f;
+        }
+
+        float up = Vector3.Dot(mainShip.transform.up, toTarget.normalized);
+        float right = Vector3.Dot(mainShip.transform.right, toTarget.normalized);
+
+        // The Hud root is a centered 100x100 rect, so use the root canvas size for the edges.
+        Canvas hudCanvas = hud.GetComponentInParent<Canvas>();
+        RectTransform canvasRect = hudCanvas != null ? hudCanvas.rootCanvas.transform as RectTransform : null;
+        float screenWidth = canvasRect != null ? canvasRect.rect.width : Screen.width;
+        float screenHeight = canvasRect != null ? canvasRect.rect.height : Screen.height;
+
+        float previousArrowRotation = hud.arrowPreviousRotation;
+        float arrowTargetRotation = hud.arrowTargetRotation;
+        float arrowLerpTime = hud.arrowLerpTime;
+
+        arrowLerpTime += 5f * Time.deltaTime;
+        float arrowRotation = Mathf.Lerp(previousArrowRotation, arrowTargetRotation, Mathf.Min(1f, arrowLerpTime));
+        hud.arrowTarget.transform.localRotation = Quaternion.Euler(0, 0, arrowRotation);
+
+        if (right > 0)
+        {
+            if (up > 0.5f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2((screenWidth / 2f) * ((0.5f - (up - 0.5f)) * 2f), screenHeight / 2f);
+
+                if (arrowTargetRotation != -90)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = -90;
+                    arrowLerpTime = 0;
+                }
+            }
+            else if (up < 0.5f & up > 0f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2(screenWidth / 2f, (screenHeight / 2f) * up * 2f);
+
+                if (arrowTargetRotation != -90)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = -90;
+                    arrowLerpTime = 0;
+                }
+            }
+            else if (up < 0f & up > -0.5f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2(screenWidth / 2f, (screenHeight / 2f) * up * 2f);
+
+                if (arrowTargetRotation != -180)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = -180;
+                    arrowLerpTime = 0;
+                }
+            }
+            else if (up < -0.5f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2((screenWidth / 2f) * ((0.5f + (up + 0.5f)) * 2f), -screenHeight / 2f);
+
+                if (arrowTargetRotation != -180)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = -180;
+                    arrowLerpTime = 0;
+                }
+            }
+        }
+        else
+        {
+            if (up > 0.5f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2((screenWidth / 2f) * ((0.5f - (up - 0.5f)) * -2f), screenHeight / 2f);
+
+                if (arrowTargetRotation != 0)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = 0;
+                    arrowLerpTime = 0;
+                }
+            }
+            else if (up < 0.5f & up > 0f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2(-screenWidth / 2f, (screenHeight / 2f) * up * 2f);
+
+                if (arrowTargetRotation != 0)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = 0;
+                    arrowLerpTime = 0;
+                }
+            }
+            else if (up < 0f & up > -0.5f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2(-screenWidth / 2f, (screenHeight / 2f) * up * 2f);
+
+                if (arrowTargetRotation != -270)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = -270;
+                    arrowLerpTime = 0;
+                }
+            }
+            else if (up < -0.5f)
+            {
+                hud.arrowTarget.transform.localPosition = new Vector2((screenWidth / 2f) * ((0.5f + (up + 0.5f)) * -2f), -screenHeight / 2f);
+
+                if (arrowTargetRotation != -270)
+                {
+                    previousArrowRotation = arrowRotation;
+                    arrowTargetRotation = -270;
+                    arrowLerpTime = 0;
+                }
+            }
+        }
+
+        hud.arrowPreviousRotation = previousArrowRotation;
+        hud.arrowTargetRotation = arrowTargetRotation;
+        hud.arrowLerpTime = arrowLerpTime;
+    }
+
     //This displays target information
     public static void DisplayTargetInformation(Hud hud)
     {

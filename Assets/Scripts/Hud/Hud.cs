@@ -25,6 +25,13 @@ public class Hud : MonoBehaviour
     public GameObject targetSelected;
     public List<GameObject> targets;
 
+    //Offscreen target arrow (edge indicator ported from Hud_Old.DisplaySelectionBraces)
+    public GameObject arrowTarget;
+    [HideInInspector] public CanvasGroup arrowCanvasGroup;
+    [HideInInspector] public float arrowPreviousRotation;
+    [HideInInspector] public float arrowTargetRotation;
+    [HideInInspector] public float arrowLerpTime;
+
     //Ship Preview
     public List<GameObject> wireframePool; 
     public GameObject wireframeObject;
@@ -47,6 +54,7 @@ public class Hud : MonoBehaviour
         HudFunctions.DisplayShipInfo(this);
         HudFunctions.DisplayFrontRadar(this);
         HudFunctions.DisplayTargets(this);
+        HudFunctions.DisplayTargetArrow(this);
         HudFunctions.DisplayEnergyManagementMeters(this);
         HudFunctions.DisplayShipPreview(this);
         HudFunctions.DisplayTargetInformation(this);

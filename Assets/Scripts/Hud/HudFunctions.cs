@@ -725,6 +725,8 @@ public static class HudFunctions
         if (hud.mainShip != null)
         {
             Ship targetShip = hud.mainShip.targetingSystem.targetShip;
+            LargeShip targetLargeShip = hud.mainShip.targetingSystem.targetLargeShip;
+            GameObject target = hud.mainShip.targetingSystem.target;
 
             //Get references
             Text targetName_text = FindText("TargetShipName");
@@ -750,6 +752,33 @@ public static class HudFunctions
 
                 targetSystems.maxValue = targetShip.systemsRating;
                 targetSystems.value = targetShip.energyManagementSystem.systemsLevel;
+            }
+            else if (targetLargeShip != null)
+            {
+                //Large ships (stations, buoys, capitals) also need the distance readout.
+                targetName_text.text = targetLargeShip.name.ToUpper();
+                targetCargo_text.text = targetLargeShip.cargo.ToUpper();
+                targetDistance_text.text = hud.mainShip.targetingSystem.targetDistance.ToString("0000");
+
+                targetShield.maxValue = targetLargeShip.shieldRating;
+                targetShield.value = targetLargeShip.shieldLevel;
+
+                targetHull.maxValue = targetLargeShip.hullRating;
+                targetHull.value = targetLargeShip.hullLevel;
+
+                targetSystems.maxValue = targetLargeShip.systemsRating;
+                targetSystems.value = targetLargeShip.systemsLevel;
+            }
+            else if (target != null && target.activeSelf == true)
+            {
+                //Static props have no ship components: at least show name and distance.
+                targetName_text.text = target.name.ToUpper();
+                targetCargo_text.text = "";
+                targetDistance_text.text = hud.mainShip.targetingSystem.targetDistance.ToString("0000");
+
+                targetShield.value = 0;
+                targetHull.value = 0;
+                targetSystems.value = 0;
             }
             else
             {

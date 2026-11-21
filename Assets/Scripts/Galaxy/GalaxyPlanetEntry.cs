@@ -5,10 +5,10 @@ using UnityEngine.Rendering;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
 
-// Galaxy Mode atmospheric entry (Fase 1: Tatooine test).
-// X near a supported planet: fade, hide the distant sphere, spawn a
-// TerrainStreamer patch (seeded from StarSystems.json) and drop the ship
-// to low altitude. Climb above the ceiling and press X to leave.
+// Galaxy Mode atmospheric entry. X near a descent beacon (or close to a
+// planet surface): fade, hide the distant sphere, spawn a TerrainStreamer
+// patch (seeded from StarSystems.json) and drop the ship to low altitude.
+// Climb above the ceiling and press X to leave.
 // Ground collision is a V1 hard clamp via downward raycast onto the tiles.
 public class GalaxyPlanetEntry : MonoBehaviour
 {
@@ -16,8 +16,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
     public static bool IsOnPlanet = false;
     public static bool IsTransitioning = false;
 
-    // Only these planets support entry for now (Fase 2: full biome table).
-    private static readonly string[] SupportedPlanets = new string[] { "Tatooine" };
+    // Any planet can be entered now. The descent beacon marks the entry
+    // point: flying inside its sphere (or close to the planet surface) and
+    // pressing X drops the ship to the atmosphere.
+    private const float BeaconEntryRange = 150f;
 
     private enum EntryState { InSpace, Entering, OnPlanet, Exiting }
 
@@ -191,19 +193,6 @@ public class GalaxyPlanetEntry : MonoBehaviour
         return false;
     }
 
-    private static bool IsSupported(string planetName)
-    {
-        foreach (string supported in SupportedPlanets)
-        {
-            if (supported == planetName)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     private void UpdateEntryPrompt()
     {
         Scene scene = SceneFunctions.GetScene();
@@ -213,20 +202,12 @@ public class GalaxyPlanetEntry : MonoBehaviour
             return;
         }
 
-        if (!IsSupported(scene.currentLocation))
-        {
-            entryPromptShown = false;
-            return;
-        }
-
         if (GetActivePlanet(scene, out GameObject planet, out Vector3 center, out float radius) == false)
         {
             return;
         }
 
-        float surfaceDistance = Vector3.Distance(scene.mainShip.transform.position, center) - radius;
-
-        if (surfaceDistance <= PromptRange)
+        if (IsWithinEntryRange(scene, center, radius) == true)
         {
             if (entryPromptShown == false)
             {
@@ -249,22 +230,25 @@ public class GalaxyPlanetEntry : MonoBehaviour
             return;
         }
 
-        if (!IsSupported(scene.currentLocation))
-        {
-            HudFunctions.AddToMissionLog("Atmospheric entry not yet supported at " + scene.currentLocation + ".");
-            return;
-        }
-
         if (GetActivePlanet(scene, out GameObject planet, out Vector3 center, out float radius) == false)
         {
             return;
         }
 
-        float surfaceDistance = Vector3.Distance(scene.mainShip.transform.position, center) - radius;
-
-        if (surfaceDistance > PromptRange)
+        if (IsWithinEntryRange(scene, center, radius) == false)
         {
-            HudFunctions.AddToMissionLog("Too far from " + scene.currentLocation + " - fly closer to enter.");
+            GameObject beacon = GetDescentBeacon(scene);
+
+            if (beacon != null)
+            {
+                float remaining = Vector3.Distance(scene.mainShip.transform.position, beacon.transform.position) - BeaconEntryRange;
+                HudFunctions.AddToMissionLog("Too far - fly into the descent beacon (" + Mathf.Max(0f, remaining).ToString("0") + " m).");
+            }
+            else
+            {
+                HudFunctions.AddToMissionLog("Too far from " + scene.currentLocation + " - fly closer to enter.");
+            }
+
             return;
         }
 
@@ -274,6 +258,56 @@ public class GalaxyPlanetEntry : MonoBehaviour
         cachedLocation = scene.currentLocation;
         returnPosition = center + (scene.mainShip.transform.position - center).normalized * (radius + PromptRange);
         StartCoroutine(EnterAtmosphereRoutine(scene));
+    }
+
+    // The beacon marks the descent point: entering its sphere is enough to
+    // press X, even if the planet bounds put the surface farther away.
+    // Close surface approach still works for planets without a beacon.
+    private static bool IsWithinEntryRange(Scene scene, Vector3 center, float radius)
+    {
+        GameObject beacon = GetDescentBeacon(scene);
+
+        if (beacon != null)
+        {
+            float beaconDistance = Vector3.Distance(scene.mainShip.transform.position, beacon.transform.position);
+
+            if (beaconDistance <= BeaconEntryRange)
+            {
+                return true;
+            }
+        }
+
+        float surfaceDistance = Vector3.Distance(scene.mainShip.transform.position, center) - radius;
+        return surfaceDistance <= PromptRange;
+    }
+
+    // Finds the neutral navbuoy spawned by GalaxyModeFunctions.SpawnDescentBeacon.
+    public static GameObject GetDescentBeacon(Scene scene)
+    {
+        if (scene == null || scene.largeShips == null)
+        {
+            return null;
+        }
+
+        foreach (LargeShip largeShip in scene.largeShips)
+        {
+            if (largeShip == null || largeShip.gameObject == null)
+            {
+                continue;
+            }
+
+            if (largeShip.gameObject.activeInHierarchy == false)
+            {
+                continue;
+            }
+
+            if (largeShip.type == "navbuoy" || largeShip.shipClass == "buoy")
+            {
+                return largeShip.gameObject;
+            }
+        }
+
+        return null;
     }
 
     // Test hook: entra directo sin comprobar distancia (para la herramienta de prueba).
@@ -287,11 +321,6 @@ public class GalaxyPlanetEntry : MonoBehaviour
         Scene scene = SceneFunctions.GetScene();
 
         if (scene == null || scene.mainShip == null || string.IsNullOrEmpty(scene.currentLocation))
-        {
-            return;
-        }
-
-        if (!IsSupported(scene.currentLocation))
         {
             return;
         }
@@ -352,9 +381,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
         savedSceneRadius = scene.sceneRadius;
         SceneFunctions.SetSceneRadius(PlanetSceneRadius);
 
-        // Desert day sky + sandy haze. The binary suns stay where they are
-        // (their flares still glow through the haze from the ground).
-        TrySetSkybox("loworbit_desert_png01", "loworbit_desert01", "sky_clouds01");
+        // Low-orbit sky matching the planet climate, with the old desert
+        // look as fallback. The binary suns stay where they are (their
+        // flares still glow through the haze from the ground).
+        TrySetSkybox(GetSkyboxNamesForPlanet(cachedLocation));
         activeCloud = GetCloudProfile(cachedLocation);
         SceneFunctions.SetFogDistanceAndColor(800f, 7000f, ColorToHex(activeCloud.tint));
 
@@ -1109,6 +1139,40 @@ public class GalaxyPlanetEntry : MonoBehaviour
         cloudWhiteoutImage.color = new Color(tint.r, tint.g, tint.b, 0f);
         cloudWhiteoutImage.raycastTarget = false;
         cloudWhiteoutGO.SetActive(false);
+    }
+
+    // Low-orbit sky per planet climate. The first material found in the
+    // scene skybox list wins, so each entry is a fallback chain.
+    private static string[] GetSkyboxNamesForPlanet(string planetName)
+    {
+        StarSystem system = GetStarSystem(planetName);
+        string planetType = system != null ? system.planetType : string.Empty;
+
+        switch ((planetType ?? string.Empty).ToLower())
+        {
+            case "city":
+                return new string[] { "loworbit_coruscant01", "loworbit_terran01", "loworbit_desert_png01" };
+
+            case "ice":
+                return new string[] { "loworbit_snow01", "loworbit_terran01", "loworbit_desert_png01" };
+
+            case "water":
+                return new string[] { "loworbit_oceanic01", "loworbit_terran01", "loworbit_desert_png01" };
+
+            case "volcanic":
+                return new string[] { "loworbit_volcanic01", "loworbit_desert_png01", "loworbit_desert01" };
+
+            case "forest":
+            case "grasslands":
+            case "tropical":
+            case "terran":
+            case "redplanet":
+            case "barren":
+                return new string[] { "loworbit_terran01", "loworbit_desert_png01", "loworbit_desert01" };
+
+            default:
+                return new string[] { "loworbit_desert_png01", "loworbit_desert01", "sky_clouds01" };
+        }
     }
 
     // Ground texture keywords from JSON. Priority: StarSystems per-planet

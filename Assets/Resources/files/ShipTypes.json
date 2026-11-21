@@ -16420,7 +16420,7 @@
             "type": "z95_headhunter",
             "displayName": "Z95 Headhunter",
             "prefab": "reb_z95_headhunter",
-            "cockpitPrefab": "none",
+            "cockpitPrefab": "z95_cockpit",
             "callsign": "z95",
             "scriptType": "smallship",
             "accelerationRating": 62.0,

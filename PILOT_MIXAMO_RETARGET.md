@@ -135,6 +135,9 @@ necesita escenas ni prefabs modificados:
   que llamaba a `ResetLandingState()` y ponía `IsLanded = false`; entonces `GalaxyPlanetEntry`
   aplicaba el clamp de 25 m y la nave parecía despegar al bajar. Al volver a la nave se reanuda tras
   dos frames para que el `Z` del personaje no se interprete como despegue.
+- La altura final de aterrizaje es 2 m (`SoftLanding.landingAltitude`), en vez de los 10 m
+  anteriores. El bucle del motor y los sonidos de S-foils se silencian mientras estás a pie y se
+  restauran al subir.
 - Si el terreno no tiene tiles `Tile_x_y` debajo, el modo no se activa y se avisa en el log.
 
 ## 7. Materiales de la cabeza

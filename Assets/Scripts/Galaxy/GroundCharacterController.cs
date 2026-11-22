@@ -35,6 +35,8 @@ public class GroundCharacterController : MonoBehaviour
     private FlightControlSystem_Small lockedFlight;
     private SoftLanding disabledLanding;
     private OGCamera disabledOGCamera;
+    private AudioSource mutedEngine;
+    private float engineVolumeBefore;
     private Vector3 cameraLocalPosition;
     private Quaternion cameraLocalRotation;
     private bool ogCameraWasEnabled;
@@ -73,6 +75,7 @@ public class GroundCharacterController : MonoBehaviour
     {
         // Never leave the ship locked if the scene unloads while on foot.
         OGInputFunctions.shipInputLocked = false;
+        RestoreShipAudio();
 
         if (disabledLanding != null)
         {
@@ -264,6 +267,7 @@ public class GroundCharacterController : MonoBehaviour
         OGInputFunctions.ClearShipInput(playerShip != null && playerShip.ogInput != null
             ? playerShip.ogInput
             : OGInputFunctions.GetOGInput());
+        SilenceShipAudio(playerShip);
 
         // Stop OGCamera while on foot: its FixedUpdate keeps moving the camera
         // root towards the ship, which fought with this script's LateUpdate.
@@ -334,9 +338,56 @@ public class GroundCharacterController : MonoBehaviour
         }
 
         OGInputFunctions.shipInputLocked = false;
+        RestoreShipAudio();
 
         lockedFlight = null;
         Log("Back in the ship.");
+    }
+
+    // The ship's engine loop keeps playing while its flight script is disabled,
+    // and a wings_close one-shot can still be fading out when the player gets
+    // out. Silence both while walking and restore the engine volume on return.
+    private void SilenceShipAudio(Ship ship)
+    {
+        mutedEngine = ship != null && ship.flightControlSystem_Small != null
+            ? ship.flightControlSystem_Small.engineAudioSource
+            : null;
+
+        if (mutedEngine != null)
+        {
+            engineVolumeBefore = mutedEngine.volume;
+            mutedEngine.volume = 0f;
+        }
+
+        Audio audioManager = AudioFunctions.GetAudioManager();
+
+        if (audioManager == null || audioManager.audioSources == null)
+        {
+            return;
+        }
+
+        foreach (AudioSource source in audioManager.audioSources)
+        {
+            if (source == null || source.isPlaying == false || source.clip == null)
+            {
+                continue;
+            }
+
+            if (source.clip.name == "wings_close" || source.clip.name == "wings_open")
+            {
+                source.Stop();
+            }
+        }
+    }
+
+    private void RestoreShipAudio()
+    {
+        if (mutedEngine != null)
+        {
+            mutedEngine.volume = engineVolumeBefore;
+        }
+
+        mutedEngine = null;
     }
 
     private void UpdateCameraInput()

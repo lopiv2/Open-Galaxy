@@ -12,7 +12,7 @@ public class SoftLanding : MonoBehaviour
     public Ship ship;
 
     [Header("Landing Settings")]
-    public float landingAltitude = 10f; // Final height above the ground (meters)
+    public float landingAltitude = 2f; // Final height above the ground (meters)
     public float descentSpeed = 15f; // Vertical descent speed when landing (m/s)
     public float maxLandingAltitude = 250f; // Highest altitude (AGL) where Z is accepted
     public float markerRange = 250f; // Marker / hint appears below this altitude

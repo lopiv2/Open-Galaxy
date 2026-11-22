@@ -20,10 +20,10 @@ public class GroundCharacterController : MonoBehaviour
     public float rotationSpeed = 12f;
 
     [Header("Third-person camera")]
-    public float cameraDistance = 3.2f;
-    public float cameraHeight = 0.6f;
-    public float cameraShoulder = 0.35f;
-    public float cameraLookHeight = 1.3f;
+    public float cameraDistance = 2.2f;
+    public float cameraHeight = 0.35f;
+    public float cameraShoulder = 0.25f;
+    public float cameraLookHeight = 1.15f;
     public float cameraSmooth = 12f;
     public float mouseSensitivity = 0.15f;
     public float minPitch = -10f;
@@ -34,6 +34,10 @@ public class GroundCharacterController : MonoBehaviour
     private Transform cameraTransform;
     private FlightControlSystem_Small lockedFlight;
     private SoftLanding disabledLanding;
+    private OGCamera disabledOGCamera;
+    private Vector3 cameraLocalPosition;
+    private Quaternion cameraLocalRotation;
+    private bool ogCameraWasEnabled;
     private bool flightWasEnabled;
     private bool landingWasEnabled;
     private bool flightLockBefore;
@@ -221,8 +225,25 @@ public class GroundCharacterController : MonoBehaviour
             disabledLanding.enabled = false;
         }
 
-        OGCamera ogCamera = OGCameraFunctions.GetOGCamera();
-        cameraTransform = ogCamera == null || ogCamera.mainCamera == null ? null : ogCamera.mainCamera.transform;
+        // Stop OGCamera while on foot: its FixedUpdate keeps moving the camera
+        // root towards the ship, which fought with this script's LateUpdate.
+        disabledOGCamera = OGCameraFunctions.GetOGCamera();
+
+        if (disabledOGCamera != null)
+        {
+            ogCameraWasEnabled = disabledOGCamera.enabled;
+            disabledOGCamera.enabled = false;
+        }
+
+        cameraTransform = disabledOGCamera == null || disabledOGCamera.mainCamera == null
+            ? null
+            : disabledOGCamera.mainCamera.transform;
+
+        if (cameraTransform != null)
+        {
+            cameraLocalPosition = cameraTransform.localPosition;
+            cameraLocalRotation = cameraTransform.localRotation;
+        }
 
         active = true;
         hintShown = false;
@@ -245,7 +266,21 @@ public class GroundCharacterController : MonoBehaviour
 
         character = null;
         animator = null;
+
+        // Put the camera back where OGCamera left it before re-enabling it.
+        if (cameraTransform != null)
+        {
+            cameraTransform.localPosition = cameraLocalPosition;
+            cameraTransform.localRotation = cameraLocalRotation;
+        }
+
+        if (disabledOGCamera != null)
+        {
+            disabledOGCamera.enabled = ogCameraWasEnabled;
+        }
+
         cameraTransform = null;
+        disabledOGCamera = null;
 
         if (lockedFlight != null)
         {

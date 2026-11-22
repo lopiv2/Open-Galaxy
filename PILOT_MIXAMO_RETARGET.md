@@ -121,9 +121,10 @@ necesita escenas ni prefabs modificados:
   desde `Resources/objects/readyrooms/readyroom_white` y lo deja sobre un tile `Tile_x_y`.
 - **WASD** mueve al personaje relativo a la cámara (también funciona el stick izquierdo del mando)
   y **Shift** corre.
-- Cámara en tercera persona a 3,2 m, con **botón derecho del ratón** o **stick derecho** para
-  orbitar; se ejecuta en `LateUpdate`, por encima del `FixedUpdate` de `OGCamera`, y no baja del
-  terreno. El movimiento siempre es relativo al ángulo de la cámara.
+- Cámara en tercera persona a 2,2 m, con **botón derecho del ratón** o **stick derecho** para
+  orbitar. `OGCamera` se desactiva mientras estás a pie para que su `FixedUpdate` no pelee con el
+  `LateUpdate` del personaje (evita la vibración); al volver a la nave se restaura la transformada
+  local de la cámara y se reactiva `OGCamera`. La cámara tampoco baja del terreno.
 - El Animator usa `Speed` e `IsRunning` para elegir entre `Idle`, `Walk` y `Run`.
 - Pulsar **C** otra vez, pulsar **Z** (vuelve a la nave; un segundo **Z** despega) o salir del
   planeta devuelve el control a la nave. Mientras estás a pie, el vuelo y `SoftLanding` están

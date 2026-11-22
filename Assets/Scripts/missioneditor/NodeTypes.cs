@@ -2017,6 +2017,7 @@ public static class NodeTypes
         options03.Add("med");
         options03.Add("mk4");
         options03.Add("probe");
+        options03.Add("rebel_pilot");
         options03.Add("r2");
         options03.Add("r4");
         options03.Add("r5");

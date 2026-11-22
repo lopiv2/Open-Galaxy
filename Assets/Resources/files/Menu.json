@@ -483,7 +483,7 @@
     {
       "ParentMenu": "View Controls - Keyboard & Mouse",
       "Name": "Walk / Run On Foot - WASD / Shift",
-      "Description": "Move the pilot with WASD and hold Shift to run",
+      "Description": "Move the pilot relative to the camera with WASD, Shift to run, right mouse to orbit",
       "Function": "none",
       "Type": "ContentButton02",
       "Variable": "none"

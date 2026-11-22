@@ -119,8 +119,11 @@ necesita escenas ni prefabs modificados:
 
 - Con **C** cerca de una nave aterrizada (o a menos de 20 m del terreno) instancia `rebel_pilot`
   desde `Resources/objects/readyrooms/readyroom_white` y lo deja sobre un tile `Tile_x_y`.
-- **WASD** mueve al personaje (también funciona el stick izquierdo del mando), **Shift** corre y
-  la cámara sigue al personaje en `LateUpdate`, por encima del `FixedUpdate` de `OGCamera`.
+- **WASD** mueve al personaje relativo a la cámara (también funciona el stick izquierdo del mando)
+  y **Shift** corre.
+- Cámara en tercera persona a 3,2 m, con **botón derecho del ratón** o **stick derecho** para
+  orbitar; se ejecuta en `LateUpdate`, por encima del `FixedUpdate` de `OGCamera`, y no baja del
+  terreno. El movimiento siempre es relativo al ángulo de la cámara.
 - El Animator usa `Speed` e `IsRunning` para elegir entre `Idle`, `Walk` y `Run`.
 - Pulsar **C** otra vez, pulsar **Z** (vuelve a la nave; un segundo **Z** despega) o salir del
   planeta devuelve el control a la nave. Mientras estás a pie, el vuelo y `SoftLanding` están

@@ -19,10 +19,15 @@ public class GroundCharacterController : MonoBehaviour
     public float runSpeed = 7f;
     public float rotationSpeed = 12f;
 
-    [Header("Camera")]
-    public Vector3 cameraOffset = new Vector3(0f, 2.2f, -5f);
-    public float cameraLookHeight = 1.4f;
-    public float cameraSmooth = 10f;
+    [Header("Third-person camera")]
+    public float cameraDistance = 3.2f;
+    public float cameraHeight = 0.6f;
+    public float cameraShoulder = 0.35f;
+    public float cameraLookHeight = 1.3f;
+    public float cameraSmooth = 12f;
+    public float mouseSensitivity = 0.15f;
+    public float minPitch = -10f;
+    public float maxPitch = 50f;
 
     private GameObject character;
     private Animator animator;
@@ -34,7 +39,9 @@ public class GroundCharacterController : MonoBehaviour
     private bool flightLockBefore;
     private bool active;
     private bool hintShown;
-    private float moveYaw;
+    private bool cameraSnap;
+    private float cameraYaw;
+    private float cameraPitch = 12f;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
@@ -118,6 +125,7 @@ public class GroundCharacterController : MonoBehaviour
             return;
         }
 
+        UpdateCameraInput();
         MoveCharacter(keyboard);
     }
 
@@ -188,8 +196,10 @@ public class GroundCharacterController : MonoBehaviour
         character.SetActive(true);
 
         animator = character.GetComponent<Animator>();
-        moveYaw = scene.mainShip.transform.eulerAngles.y;
-        character.transform.rotation = Quaternion.Euler(0f, moveYaw, 0f);
+        cameraYaw = scene.mainShip.transform.eulerAngles.y;
+        cameraPitch = 12f;
+        cameraSnap = true;
+        character.transform.rotation = Quaternion.Euler(0f, cameraYaw, 0f);
 
         // controlLock only stops rotation; disable flight and landing scripts so
         // WASD cannot thrust or trigger SoftLanding's takeoff while on foot.
@@ -253,6 +263,34 @@ public class GroundCharacterController : MonoBehaviour
         Log("Back in the ship.");
     }
 
+    private void UpdateCameraInput()
+    {
+        // Right mouse drag orbits the camera; the right stick does the same on a pad.
+        Mouse mouse = Mouse.current;
+
+        if (mouse != null && mouse.rightButton.isPressed == true)
+        {
+            Vector2 delta = mouse.delta.ReadValue();
+            cameraYaw += delta.x * mouseSensitivity;
+            cameraPitch -= delta.y * mouseSensitivity;
+        }
+
+        Gamepad gamepad = Gamepad.current;
+
+        if (gamepad != null)
+        {
+            Vector2 look = gamepad.rightStick.ReadValue();
+
+            if (look.sqrMagnitude > 0.04f)
+            {
+                cameraYaw += look.x * 120f * Time.deltaTime;
+                cameraPitch -= look.y * 90f * Time.deltaTime;
+            }
+        }
+
+        cameraPitch = Mathf.Clamp(cameraPitch, minPitch, maxPitch);
+    }
+
     private void MoveCharacter(Keyboard keyboard)
     {
         float horizontal = 0f;
@@ -282,7 +320,7 @@ public class GroundCharacterController : MonoBehaviour
 
         if (input > 0.01f)
         {
-            Vector3 worldMove = Quaternion.Euler(0f, moveYaw, 0f) * localMove.normalized;
+            Vector3 worldMove = Quaternion.Euler(0f, cameraYaw, 0f) * localMove.normalized;
             float speed = running == true ? runSpeed : walkSpeed;
 
             character.transform.position += worldMove * speed * Time.deltaTime;
@@ -332,10 +370,28 @@ public class GroundCharacterController : MonoBehaviour
         }
 
         Vector3 focus = character.transform.position + Vector3.up * cameraLookHeight;
-        Vector3 desired = focus + Quaternion.Euler(0f, moveYaw, 0f) * cameraOffset;
-        float t = 1f - Mathf.Exp(-cameraSmooth * Time.deltaTime);
+        Vector3 offset = Quaternion.Euler(cameraPitch, cameraYaw, 0f) * new Vector3(cameraShoulder, cameraHeight, -cameraDistance);
+        Vector3 desired = focus + offset;
 
-        cameraTransform.position = Vector3.Lerp(cameraTransform.position, desired, t);
+        // Never let the camera sink below the terrain when orbiting downwards.
+        float ground = SampleGroundHeight(desired);
+
+        if (float.IsNaN(ground) == false && desired.y < ground + 0.3f)
+        {
+            desired.y = ground + 0.3f;
+        }
+
+        if (cameraSnap == true)
+        {
+            cameraTransform.position = desired;
+            cameraSnap = false;
+        }
+        else
+        {
+            float t = 1f - Mathf.Exp(-cameraSmooth * Time.deltaTime);
+            cameraTransform.position = Vector3.Lerp(cameraTransform.position, desired, t);
+        }
+
         cameraTransform.rotation = Quaternion.LookRotation(focus - cameraTransform.position, Vector3.up);
     }
 

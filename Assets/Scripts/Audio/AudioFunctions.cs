@@ -298,9 +298,19 @@ public static class AudioFunctions
 
         if (flightControl.engineAudioSource != null)
         {
+            // Scripted sequences (landing) can fade the engine out smoothly,
+            // just like reducing throttle lowers the pitch, but all the way to silence.
+            float engineFade = Mathf.Clamp01(flightControl.engineAudioFade);
+
+            if (flightControl.engineAudioPitchOverride >= 0f)
+            {
+                pitch = Mathf.Max(0f, flightControl.engineAudioPitchOverride);
+            }
+
             flightControl.engineAudioSource.priority = priority;
             flightControl.engineAudioSource.spatialBlend = spatialBlend;
             flightControl.engineAudioSource.pitch = pitch;
+            flightControl.engineAudioSource.volume = 0.2f * engineFade;
 
             if (flightControl.engineAudioSource.isPlaying == false & flightControl.engineAudioSource.enabled == true)
             {
@@ -308,7 +318,6 @@ public static class AudioFunctions
                 flightControl.engineAudioSource.dopplerLevel = 0f;
                 flightControl.engineAudioSource.spread = 45;
                 flightControl.engineAudioSource.maxDistance = 500;
-                flightControl.engineAudioSource.volume = 0.2f;
                 flightControl.engineAudioSource.rolloffMode = AudioRolloffMode.Linear;
                 flightControl.engineAudioSource.loop = true;
                 flightControl.engineAudioSource.Play();

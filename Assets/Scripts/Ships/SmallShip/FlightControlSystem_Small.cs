@@ -45,6 +45,11 @@ public class FlightControlSystem_Small : MonoBehaviour
     public AudioSource engineAudioSource;
     public string engineAudio;
 
+    // Optional engine audio fade used by scripted sequences (e.g. landing).
+    // engineAudioFade scales volume; pitchOverride >= 0 replaces the speed-based pitch.
+    [HideInInspector] public float engineAudioFade = 1f;
+    [HideInInspector] public float engineAudioPitchOverride = -1f;
+
     [Header("Ship Cameras Positions")]
     public GameObject cameraPosition;
     public GameObject followCameraPosition;

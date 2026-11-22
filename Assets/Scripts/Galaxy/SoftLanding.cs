@@ -32,6 +32,7 @@ public class SoftLanding : MonoBehaviour
     private bool previousDocking = false;
     private bool previousInvincible = false;
     private bool wingsClosedByLanding = false;
+    private float landingStartEnginePitch = 1f;
 
     private void Start()
     {
@@ -233,6 +234,25 @@ public class SoftLanding : MonoBehaviour
         // Fold the S-foils (if the ship has them) while it settles down.
         FoldSFoils();
 
+        // Remember the current engine tone so it can wind down to silence
+        // together with the descent instead of snapping off when thrust hits zero.
+        landingStartEnginePitch = 1f;
+
+        if (flight != null && flight.engineAudioSource != null)
+        {
+            landingStartEnginePitch = Mathf.Max(0f, flight.engineAudioSource.pitch);
+        }
+        else if (flight != null && ship != null && ship.speedRating > 0f)
+        {
+            landingStartEnginePitch = Mathf.Clamp01(flight.thrustSpeed / ship.speedRating);
+        }
+
+        if (flight != null)
+        {
+            flight.engineAudioFade = 1f;
+            flight.engineAudioPitchOverride = landingStartEnginePitch;
+        }
+
         Vector3 start = transform.position;
         Vector3 end = new Vector3(start.x, groundHeight + landingAltitude, start.z);
 
@@ -256,12 +276,28 @@ public class SoftLanding : MonoBehaviour
             transform.rotation = Quaternion.Slerp(startRotation, endRotation, t);
             StopShipMotion();
 
+            // Engine pitch and volume follow the same curve as the descent:
+            // by the time the ship touches down the engine is completely off.
+            if (flight != null)
+            {
+                float engineLevel = 1f - t;
+                flight.engineAudioFade = engineLevel;
+                flight.engineAudioPitchOverride = landingStartEnginePitch * engineLevel;
+            }
+
             yield return null;
         }
 
         transform.position = end;
         transform.rotation = endRotation;
         StopShipMotion();
+
+        // Fully shut the engine down while landed.
+        if (flight != null)
+        {
+            flight.engineAudioFade = 0f;
+            flight.engineAudioPitchOverride = 0f;
+        }
 
         if (landingEffect != null)
         {
@@ -339,6 +375,7 @@ public class SoftLanding : MonoBehaviour
 
         // Open the S-foils again before lifting off.
         OpenSFoils();
+        RestoreEngineAudio();
 
         if (landingMarkerGO != null)
         {
@@ -375,6 +412,7 @@ public class SoftLanding : MonoBehaviour
         }
 
         OpenSFoils();
+        RestoreEngineAudio();
 
         if (landingMarkerGO != null)
         {
@@ -429,6 +467,18 @@ public class SoftLanding : MonoBehaviour
         {
             WingSystemFunctions.OpenWings(ship.wingSystems);
         }
+    }
+
+    // Hands engine sound control back to the normal speed-based behaviour.
+    private void RestoreEngineAudio()
+    {
+        if (flight == null)
+        {
+            return;
+        }
+
+        flight.engineAudioFade = 1f;
+        flight.engineAudioPitchOverride = -1f;
     }
 
     private void StopShipMotion()
@@ -550,5 +600,7 @@ public class SoftLanding : MonoBehaviour
         {
             GalaxyPlanetEntry.IsLanded = false;
         }
+
+        RestoreEngineAudio();
     }
 }

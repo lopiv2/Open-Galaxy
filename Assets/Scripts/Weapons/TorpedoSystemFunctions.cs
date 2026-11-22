@@ -114,10 +114,16 @@ public static class TorpedoSystemFunctions
     //This causes the player to fire a torpedo
     public static void FireTorpedoPlayer(TorpedoSystem torpedoSystem)
     {
-        //Rogue Squadron rule: closed S-foils = no weapons. Warn, throttled.
+        //Rogue Squadron rule: closed S-foils = no weapons. Warn, throttled,
+        //and only when the player is actually trying to fire. Otherwise the
+        //beep05_error clip repeats every two seconds while the ship sits
+        //landed with its S-foils folded.
         if (WingSystemFunctions.WeaponsBlockedByWings(torpedoSystem.ship) == true)
         {
-            if (Time.time > torpedoSystem.weaponManagement.wingsClosedWarnTime)
+            bool wantsToFire = torpedoSystem.weaponManagement != null
+                && torpedoSystem.weaponManagement.fireWeapon == true;
+
+            if (wantsToFire == true && Time.time > torpedoSystem.weaponManagement.wingsClosedWarnTime)
             {
                 torpedoSystem.weaponManagement.wingsClosedWarnTime = Time.time + 2f;
                 AudioFunctions.PlayAudioClip(torpedoSystem.ship.audioManager, "beep05_error", "Cockpit", torpedoSystem.gameObject.transform.position, 0, 1, 500, 0.9f);

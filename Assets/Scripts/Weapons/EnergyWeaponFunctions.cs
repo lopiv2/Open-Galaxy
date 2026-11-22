@@ -533,10 +533,16 @@ public static class EnergyWeaponFunctions
         WeaponManagement weaponManagement = energyWeapon.weaponManagement;
         Ship ship = energyWeapon.ship;
 
-        //Rogue Squadron rule: closed S-foils = no weapons. Warn, throttled.
+        //Rogue Squadron rule: closed S-foils = no weapons. Warn, throttled,
+        //and only when the player is actually trying to fire. These Update
+        //functions run every frame, so warning here unconditionally made the
+        //beep05_error clip play forever while landed (S-foils folded).
         if (WingSystemFunctions.WeaponsBlockedByWings(ship) == true)
         {
-            if (Time.time > weaponManagement.wingsClosedWarnTime)
+            bool wantsToFire = weaponManagement != null
+                && (weaponManagement.fireWeapon == true || weaponManagement.rapidFire == true);
+
+            if (wantsToFire == true && Time.time > weaponManagement.wingsClosedWarnTime)
             {
                 weaponManagement.wingsClosedWarnTime = Time.time + 2f;
                 AudioFunctions.PlayAudioClip(ship.audioManager, "beep05_error", "Cockpit", ship.gameObject.transform.position, 0, 1, 500, 0.9f);

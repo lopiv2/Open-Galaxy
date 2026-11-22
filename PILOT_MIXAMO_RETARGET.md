@@ -127,8 +127,14 @@ necesita escenas ni prefabs modificados:
   local de la cámara y se reactiva `OGCamera`. La cámara tampoco baja del terreno.
 - El Animator usa `Speed` e `IsRunning` para elegir entre `Idle`, `Walk` y `Run`.
 - Pulsar **C** otra vez, pulsar **Z** (vuelve a la nave; un segundo **Z** despega) o salir del
-  planeta devuelve el control a la nave. Mientras estás a pie, el vuelo y `SoftLanding` están
-  desactivados para que WASD no acelere ni provoque el despegue.
+  planeta devuelve el control a la nave.
+- Mientras estás a pie, `FlightControlSystem_Small` se desactiva y `OGInputFunctions.shipInputLocked`
+  deja a cero todo el input de la nave (empuje, armas, poder, apuntado y contramedidas), así que
+  WASD sólo mueve al personaje.
+- `SoftLanding` no se desactiva: se pone `suspended = true`. Desactivarlo disparaba su `OnDisable`,
+  que llamaba a `ResetLandingState()` y ponía `IsLanded = false`; entonces `GalaxyPlanetEntry`
+  aplicaba el clamp de 25 m y la nave parecía despegar al bajar. Al volver a la nave se reanuda tras
+  dos frames para que el `Z` del personaje no se interprete como despegue.
 - Si el terreno no tiene tiles `Tile_x_y` debajo, el modo no se activa y se avisa en el log.
 
 ## 7. Materiales de la cabeza

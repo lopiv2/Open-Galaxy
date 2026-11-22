@@ -39,11 +39,11 @@ public class GroundCharacterController : MonoBehaviour
     private Quaternion cameraLocalRotation;
     private bool ogCameraWasEnabled;
     private bool flightWasEnabled;
-    private bool landingWasEnabled;
     private bool flightLockBefore;
     private bool active;
     private bool hintShown;
     private bool cameraSnap;
+    private int landingResumeFrames;
     private float cameraYaw;
     private float cameraPitch = 12f;
 
@@ -71,6 +71,14 @@ public class GroundCharacterController : MonoBehaviour
 
     private void OnDestroy()
     {
+        // Never leave the ship locked if the scene unloads while on foot.
+        OGInputFunctions.shipInputLocked = false;
+
+        if (disabledLanding != null)
+        {
+            disabledLanding.suspended = false;
+        }
+
         if (Instance == this)
         {
             Instance = null;
@@ -79,6 +87,19 @@ public class GroundCharacterController : MonoBehaviour
 
     private void Update()
     {
+        // Let a frame pass before SoftLanding listens again, so the Z that
+        // returned us to the ship is not reused as a takeoff command.
+        if (disabledLanding != null && landingResumeFrames > 0)
+        {
+            landingResumeFrames--;
+
+            if (landingResumeFrames == 0)
+            {
+                disabledLanding.suspended = false;
+                disabledLanding = null;
+            }
+        }
+
         Keyboard keyboard = Keyboard.current;
 
         if (keyboard == null)
@@ -205,8 +226,7 @@ public class GroundCharacterController : MonoBehaviour
         cameraSnap = true;
         character.transform.rotation = Quaternion.Euler(0f, cameraYaw, 0f);
 
-        // controlLock only stops rotation; disable flight and landing scripts so
-        // WASD cannot thrust or trigger SoftLanding's takeoff while on foot.
+        // controlLock only stops rotation: disable flight so WASD cannot thrust.
         lockedFlight = scene.mainShip.GetComponent<FlightControlSystem_Small>();
 
         if (lockedFlight != null)
@@ -215,15 +235,35 @@ public class GroundCharacterController : MonoBehaviour
             flightLockBefore = lockedFlight.controlLock;
             lockedFlight.enabled = false;
             lockedFlight.controlLock = true;
+            lockedFlight.thrustSpeed = 0f;
+            lockedFlight.thrustInput = 0f;
         }
 
+        Rigidbody shipBody = scene.mainShip.GetComponent<Rigidbody>();
+
+        if (shipBody != null)
+        {
+            shipBody.linearVelocity = Vector3.zero;
+            shipBody.angularVelocity = Vector3.zero;
+        }
+
+        // Keep the ship landed. Disabling SoftLanding would run OnDisable() and
+        // clear IsLanded, so suspend it instead.
         disabledLanding = scene.mainShip.GetComponent<SoftLanding>();
+        landingResumeFrames = 0;
 
         if (disabledLanding != null)
         {
-            landingWasEnabled = disabledLanding.enabled;
-            disabledLanding.enabled = false;
+            disabledLanding.suspended = true;
         }
+
+        // OGInput is shared by weapons, power, targeting and countermeasures.
+        // Lock it so none of those ship controls work while on foot.
+        Ship playerShip = scene.mainShip.GetComponent<Ship>();
+        OGInputFunctions.shipInputLocked = true;
+        OGInputFunctions.ClearShipInput(playerShip != null && playerShip.ogInput != null
+            ? playerShip.ogInput
+            : OGInputFunctions.GetOGInput());
 
         // Stop OGCamera while on foot: its FixedUpdate keeps moving the camera
         // root towards the ship, which fought with this script's LateUpdate.
@@ -290,11 +330,12 @@ public class GroundCharacterController : MonoBehaviour
 
         if (disabledLanding != null)
         {
-            disabledLanding.enabled = landingWasEnabled;
+            landingResumeFrames = 2;
         }
 
+        OGInputFunctions.shipInputLocked = false;
+
         lockedFlight = null;
-        disabledLanding = null;
         Log("Back in the ship.");
     }
 

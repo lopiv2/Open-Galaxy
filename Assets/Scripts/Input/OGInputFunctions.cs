@@ -5,9 +5,21 @@ using System.Collections.Generic;
 
 public static class OGInputFunctions
 {
+    // While the player is walking on a planet, the ship must not react to any
+    // input. This is checked inside UpdateInput so every system that reads
+    // OGInput (weapons, power, targeting, ...) sees neutral values, regardless
+    // of script execution order.
+    public static bool shipInputLocked = false;
+
     //This updates the input
     public static void UpdateInput(OGInput ogInput)
     {
+        if (shipInputLocked == true)
+        {
+            ClearShipInput(ogInput);
+            return;
+        }
+
         //This gets key references if they're mission
         if (ogInput.scene == null)
         {
@@ -27,6 +39,51 @@ public static class OGInputFunctions
         //This detects a change in input
         DetectInputType(ogInput);
         UpdateInputSettings(ogInput);
+    }
+
+    //Neutralises every ship control. Settings such as inversion, sensitivity
+    //and keyboardAndMouse are deliberately left untouched.
+    public static void ClearShipInput(OGInput ogInput)
+    {
+        if (ogInput == null)
+        {
+            return;
+        }
+
+        ogInput.rollInput = 0f;
+        ogInput.pitchInput = 0f;
+        ogInput.turnInput = 0f;
+        ogInput.thrustInput = 0f;
+        ogInput.targetMouseInput = Vector2.zero;
+        ogInput.currentMouseInput = Vector2.zero;
+        ogInput.controllerThrust = 0f;
+        ogInput.smoothedPitch = 0f;
+        ogInput.smoothedRoll = 0f;
+        ogInput.smoothedTurn = 0f;
+        ogInput.controllerPitch = 0f;
+        ogInput.controllerRoll = 0f;
+        ogInput.controllerTurn = 0f;
+
+        ogInput.powerToShields = false;
+        ogInput.powerToEngine = false;
+        ogInput.powerToLasers = false;
+        ogInput.resetPowerLevels = false;
+        ogInput.getNextTarget = false;
+        ogInput.getNextEnemy = false;
+        ogInput.getClosestEnemy = false;
+        ogInput.selectTargetInFront = false;
+        ogInput.fireWeapon = false;
+        ogInput.rapidFire = false;
+        ogInput.toggleWeapons = false;
+        ogInput.toggleWeaponNumber = false;
+        ogInput.matchSpeed = false;
+        ogInput.focusCamera = false;
+        ogInput.fireCounterMeasures = false;
+        ogInput.toggleWings = false;
+        ogInput.choiceUp = false;
+        ogInput.choiceDown = false;
+        ogInput.choiceRight = false;
+        ogInput.choiceLeft = false;
     }
 
     //This gets the keyboard input

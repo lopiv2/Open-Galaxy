@@ -34,6 +34,11 @@ public class SoftLanding : MonoBehaviour
     private bool wingsClosedByLanding = false;
     private float landingStartEnginePitch = 1f;
 
+    // Foot mode freezes the landed state instead of disabling this component:
+    // OnDisable() would call ResetLandingState(), clear GalaxyPlanetEntry.IsLanded
+    // and make the MinClearance clamp pop the ship back into the air.
+    [HideInInspector] public bool suspended = false;
+
     private void Start()
     {
         EnsureReferences();
@@ -116,6 +121,12 @@ public class SoftLanding : MonoBehaviour
 
     private void Update()
     {
+        // The player is on foot: keep the ship landed and ignore all input.
+        if (suspended == true)
+        {
+            return;
+        }
+
         // Only active while flying inside a planet's atmosphere.
         if (GalaxyPlanetEntry.IsOnPlanet == false)
         {
@@ -582,6 +593,12 @@ public class SoftLanding : MonoBehaviour
 
     private void OnDisable()
     {
+        // Do not undo the landing just because foot mode suspended us.
+        if (suspended == true)
+        {
+            return;
+        }
+
         if (landed == true || landing == true)
         {
             ResetLandingState();

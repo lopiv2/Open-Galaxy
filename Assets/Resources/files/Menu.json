@@ -473,6 +473,22 @@
       "Variable": "none"
     },
     {
+      "ParentMenu": "View Controls - Keyboard & Mouse",
+      "Name": "Enter / Leave Foot Mode - C",
+      "Description": "Place the pilot on the terrain near a landed ship and return to the ship",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "View Controls - Keyboard & Mouse",
+      "Name": "Walk / Run On Foot - WASD / Shift",
+      "Description": "Move the pilot with WASD and hold Shift to run",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
       "ParentMenu": "Controls",
       "Name": "View Controls - Controller",
       "Description": "View Controller Controls",

@@ -104,8 +104,23 @@ sigan pegados. El original queda intacto; dime si quieres que prepare esa copia.
 
 `Assets/Data/objects/readyrooms/characters/animations/Walking.fbx` está importada como **Humanoid**
 (Avatar `WalkingAvatar`, válido) con el clip renombrado `Walking`, 1,033 s y `Loop Time` activado.
-El controlador `Walking.controller` tiene un único estado `Walk` con ese clip y está asignado al
-Animator de `rebel_pilot` (con `Apply Root Motion = false` para que camine en el sitio). Cualquier
-otro personaje con Avatar Humanoid puede usar el mismo controlador sin reimportar el clip.
+El controlador `Walking.controller` sigue siendo el ejemplo mínimo con un único estado `Walk`.
+`Running.fbx` también está importado como Humanoid (`RunningAvatar`, clip `Running` de 0,633 s en
+bucle) y `CharacterLocomotion.controller` usa `Idle` / `Walk` / `Run` con los parámetros `Speed`
+y `IsRunning`. Ese es el controlador asignado ahora a `rebel_pilot`, con `Apply Root Motion = false`
+para que el movimiento lo haga el script y no la animación.
 Los personajes que no tienen Avatar Humanoid (los droides del readyroom) no pueden retargetearlo
 hasta que se les configure uno.
+
+## 6. Modo a pie (prototipo)
+
+`Assets/Scripts/Galaxy/GroundCharacterController.cs` se crea solo al arrancar en play mode y no
+necesita escenas ni prefabs modificados:
+
+- Con **C** cerca de una nave aterrizada (o a menos de 20 m del terreno) instancia `rebel_pilot`
+  desde `Resources/objects/readyrooms/readyroom_white` y lo deja sobre un tile `Tile_x_y`.
+- **WASD** mueve al personaje (también funciona el stick izquierdo del mando), **Shift** corre y
+  la cámara sigue al personaje en `LateUpdate`, por encima del `FixedUpdate` de `OGCamera`.
+- El Animator usa `Speed` e `IsRunning` para elegir entre `Idle`, `Walk` y `Run`.
+- Pulsar **C** otra vez, despegar con **Z** o salir del planeta devuelve el control a la nave.
+- Si el terreno no tiene tiles `Tile_x_y` debajo, el modo no se activa y se avisa en el log.

@@ -28,6 +28,10 @@ public class GroundCharacterController : MonoBehaviour
     private Animator animator;
     private Transform cameraTransform;
     private FlightControlSystem_Small lockedFlight;
+    private SoftLanding disabledLanding;
+    private bool flightWasEnabled;
+    private bool landingWasEnabled;
+    private bool flightLockBefore;
     private bool active;
     private bool hintShown;
     private float moveYaw;
@@ -97,16 +101,18 @@ public class GroundCharacterController : MonoBehaviour
             return;
         }
 
-        Scene scene = SceneFunctions.GetScene();
-
-        if (GalaxyPlanetEntry.IsOnPlanet == false || scene == null || scene.mainShip == null)
+        // SoftLanding is disabled while on foot, so release it first. The next
+        // Z press belongs to the ship and performs the actual takeoff.
+        if (keyboard.zKey.wasPressedThisFrame == true)
         {
             ExitFootMode();
+            Log("Press Z again to take off.");
             return;
         }
 
-        // Taking off with Z automatically leaves foot mode.
-        if (GalaxyPlanetEntry.IsLanded == false && IsNearGround(scene.mainShip.transform.position) == false)
+        Scene scene = SceneFunctions.GetScene();
+
+        if (GalaxyPlanetEntry.IsOnPlanet == false || scene == null || scene.mainShip == null)
         {
             ExitFootMode();
             return;
@@ -185,11 +191,24 @@ public class GroundCharacterController : MonoBehaviour
         moveYaw = scene.mainShip.transform.eulerAngles.y;
         character.transform.rotation = Quaternion.Euler(0f, moveYaw, 0f);
 
+        // controlLock only stops rotation; disable flight and landing scripts so
+        // WASD cannot thrust or trigger SoftLanding's takeoff while on foot.
         lockedFlight = scene.mainShip.GetComponent<FlightControlSystem_Small>();
 
         if (lockedFlight != null)
         {
+            flightWasEnabled = lockedFlight.enabled;
+            flightLockBefore = lockedFlight.controlLock;
+            lockedFlight.enabled = false;
             lockedFlight.controlLock = true;
+        }
+
+        disabledLanding = scene.mainShip.GetComponent<SoftLanding>();
+
+        if (disabledLanding != null)
+        {
+            landingWasEnabled = disabledLanding.enabled;
+            disabledLanding.enabled = false;
         }
 
         OGCamera ogCamera = OGCameraFunctions.GetOGCamera();
@@ -218,13 +237,19 @@ public class GroundCharacterController : MonoBehaviour
         animator = null;
         cameraTransform = null;
 
-        // SoftLanding already keeps the ship locked while landed.
-        if (lockedFlight != null && GalaxyPlanetEntry.IsLanded == false)
+        if (lockedFlight != null)
         {
-            lockedFlight.controlLock = false;
+            lockedFlight.controlLock = flightLockBefore;
+            lockedFlight.enabled = flightWasEnabled;
+        }
+
+        if (disabledLanding != null)
+        {
+            disabledLanding.enabled = landingWasEnabled;
         }
 
         lockedFlight = null;
+        disabledLanding = null;
         Log("Back in the ship.");
     }
 

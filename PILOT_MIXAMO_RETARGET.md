@@ -122,5 +122,7 @@ necesita escenas ni prefabs modificados:
 - **WASD** mueve al personaje (también funciona el stick izquierdo del mando), **Shift** corre y
   la cámara sigue al personaje en `LateUpdate`, por encima del `FixedUpdate` de `OGCamera`.
 - El Animator usa `Speed` e `IsRunning` para elegir entre `Idle`, `Walk` y `Run`.
-- Pulsar **C** otra vez, despegar con **Z** o salir del planeta devuelve el control a la nave.
+- Pulsar **C** otra vez, pulsar **Z** (vuelve a la nave; un segundo **Z** despega) o salir del
+  planeta devuelve el control a la nave. Mientras estás a pie, el vuelo y `SoftLanding` están
+  desactivados para que WASD no acelere ni provoque el despegue.
 - Si el terreno no tiene tiles `Tile_x_y` debajo, el modo no se activa y se avisa en el log.

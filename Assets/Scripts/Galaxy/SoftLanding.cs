@@ -31,6 +31,7 @@ public class SoftLanding : MonoBehaviour
     private bool previousControlLock = false;
     private bool previousDocking = false;
     private bool previousInvincible = false;
+    private bool wingsClosedByLanding = false;
 
     private void Start()
     {
@@ -229,6 +230,9 @@ public class SoftLanding : MonoBehaviour
             ship.damageSystem.invincible = true;
         }
 
+        // Fold the S-foils (if the ship has them) while it settles down.
+        FoldSFoils();
+
         Vector3 start = transform.position;
         Vector3 end = new Vector3(start.x, groundHeight + landingAltitude, start.z);
 
@@ -333,6 +337,9 @@ public class SoftLanding : MonoBehaviour
 
         StopShipMotion();
 
+        // Open the S-foils again before lifting off.
+        OpenSFoils();
+
         if (landingMarkerGO != null)
         {
             landingMarkerGO.SetActive(false);
@@ -367,12 +374,61 @@ public class SoftLanding : MonoBehaviour
             ship.damageSystem.invincible = previousInvincible;
         }
 
+        OpenSFoils();
+
         if (landingMarkerGO != null)
         {
             landingMarkerGO.SetActive(false);
         }
 
         hintShown = false;
+    }
+
+    // Folds the S-foils while landed (ships without movable wings ignore this).
+    private void FoldSFoils()
+    {
+        if (ship == null || ship.wingSystems == null)
+        {
+            return;
+        }
+
+        if (WingSystemFunctions.HasMovableWings(ship.wingSystems) == false)
+        {
+            return;
+        }
+
+        wingsClosedByLanding = true;
+
+        if (ship.wingSystems.wingsOpen == true)
+        {
+            WingSystemFunctions.CloseWings(ship.wingSystems);
+        }
+    }
+
+    // Opens the S-foils again on takeoff / aborted landing.
+    private void OpenSFoils()
+    {
+        if (wingsClosedByLanding == false)
+        {
+            return;
+        }
+
+        wingsClosedByLanding = false;
+
+        if (ship == null || ship.wingSystems == null)
+        {
+            return;
+        }
+
+        if (WingSystemFunctions.HasMovableWings(ship.wingSystems) == false)
+        {
+            return;
+        }
+
+        if (ship.wingSystems.wingsOpen == false)
+        {
+            WingSystemFunctions.OpenWings(ship.wingSystems);
+        }
     }
 
     private void StopShipMotion()

@@ -48,8 +48,8 @@ Si quieres que el sistema se añada automáticamente a nuevas naves, edita tambi
 1. Vuela tu nave dentro de la atmósfera del planeta
 2. Acerca la nave a menos de 250 metros del suelo
 3. Pulsa `Z` para iniciar la secuencia de aterrizaje suave
-4. La nave descenderá suavemente hasta los 10 metros y se quedará posada
-5. Pulsa `Z` o acelera con W para despegar
+4. La nave descenderá suavemente hasta los 10 metros, se quedará posada y plegará los S-foils si los tiene
+5. Pulsa `Z` o acelera con W para despegar (los S-foils se abren otra vez)
 
 ### Requisitos
 - Estar en Galaxy Mode (sobre un planeta)

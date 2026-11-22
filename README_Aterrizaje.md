@@ -28,9 +28,9 @@ Assets/Scripts/Galaxy/SoftLanding.cs
 1. Al pulsar Z, la nave desciende suavemente y se nivela con el horizonte
 2. El marcador visual (plano transparente verde) se coloca sobre el suelo
 3. El juego reproduce sonidos de motor durante el descenso
-4. La nave se posa a 10 m del suelo y queda bloqueada
+4. La nave se posa a 10 m del suelo y queda bloqueada (si tiene S-foils, se pliegan)
 5. Se muestra un mensaje "LANDED" en el HUD
-6. Para despegar, pulsa Z o acelera con el mando (W)
+6. Para despegar, pulsa Z o acelera con el mando (W). Los S-foils se abren de nuevo
 
 ## Configuración
 

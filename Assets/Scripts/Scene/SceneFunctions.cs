@@ -966,6 +966,9 @@ public static class SceneFunctions
                     weaponManagement = shipGO.AddComponent<WeaponManagement>();
                 }
 
+                // Add SoftLanding component for soft landing functionality on any planet
+                SoftLanding softLanding = shipGO.AddComponent<SoftLanding>();
+
                 if (scene.smallShips == null)
                 {
                     scene.smallShips = new List<Ship>();

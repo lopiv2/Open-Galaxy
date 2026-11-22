@@ -15,6 +15,9 @@ public class GalaxyPlanetEntry : MonoBehaviour
     public static GalaxyPlanetEntry Instance;
     public static bool IsOnPlanet = false;
     public static bool IsTransitioning = false;
+    // Set by SoftLanding while the ship is descending to / resting on the
+    // ground: the MinClearance clamp must not push it back up.
+    public static bool IsLanded = false;
 
     // Any planet can be entered now. The descent beacon marks the entry
     // point: flying inside its sphere (or close to the planet surface) and
@@ -67,7 +70,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
     private const float MaxTerrainHeightTatooine = 250f;
     private const float ExitCeilingAGL = 1500f;
     private const float ExitArmAGL = 800f;
-    private const float MinClearance = 25f;
+    public const float MinClearance = 25f;
     // Fallback deck when PlanetTypes.json has no cloud block for the planet.
     // Real values come from CloudProfile (JSON per planetType).
     private const float DefaultCloudAltitude = 1400f;
@@ -111,6 +114,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         Instance = this;
         IsOnPlanet = false;
         IsTransitioning = false;
+        IsLanded = false;
     }
 
     void OnDestroy()
@@ -122,6 +126,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
         IsOnPlanet = false;
         IsTransitioning = false;
+        IsLanded = false;
         DestroyTerrain();
         DestroyFadeCanvas();
     }
@@ -342,6 +347,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
     {
         state = EntryState.Entering;
         IsTransitioning = true;
+        IsLanded = false;
         entryPromptShown = false;
         exitPromptShown = false;
 
@@ -493,7 +499,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
                 + " distToCenter=" + distToCenter.ToString("F1"));
         }
 
-        if (float.IsNaN(groundHeight) == false && agl < MinClearance)
+        if (float.IsNaN(groundHeight) == false && agl < MinClearance && IsLanded == false)
         {
             Vector3 shipPos = scene.mainShip.transform.position;
             shipPos.y = groundHeight + MinClearance;
@@ -557,6 +563,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
     {
         state = EntryState.Exiting;
         IsTransitioning = true;
+        IsLanded = false;
 
         GameObject mainShip = scene.mainShip;
         Ship ship = mainShip != null ? mainShip.GetComponent<Ship>() : null;
@@ -659,6 +666,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         state = EntryState.InSpace;
         IsOnPlanet = false;
         IsTransitioning = false;
+        IsLanded = false;
     }
 
     private void DestroyTerrain()

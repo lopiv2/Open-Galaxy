@@ -433,6 +433,46 @@
       "Variable": "none"
     },
     {
+      "ParentMenu": "View Controls - Keyboard & Mouse",
+      "Name": "Enter / Exit Planet - X",
+      "Description": "Start or leave atmospheric entry over a planet",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "View Controls - Keyboard & Mouse",
+      "Name": "Land / Take Off - Z",
+      "Description": "Soft land on the planet, press again to lift off (throttle up also works)",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "View Controls - Keyboard & Mouse",
+      "Name": "Toggle S-Foils - V",
+      "Description": "Open or fold the wings; folded wings give cruise speed",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "View Controls - Keyboard & Mouse",
+      "Name": "Open Galaxy Map - M",
+      "Description": "Open or close the navigable star map in Galaxy Mode",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "View Controls - Keyboard & Mouse",
+      "Name": "Cycle Planet Targets - H",
+      "Description": "Cycle the points of interest on the current planet",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
       "ParentMenu": "Controls",
       "Name": "View Controls - Controller",
       "Description": "View Controller Controls",
@@ -570,7 +610,7 @@
     },
     {
       "ParentMenu": "View Controls - Controller",
-      "Name": "Match Speed - Right Thumbstick Button",
+      "Name": "Match Speed - Left Stick Button",
       "Description": "View Player Controls",
       "Function": "none",
       "Type": "ContentButton02",
@@ -586,8 +626,24 @@
     },
     {
       "ParentMenu": "View Controls - Controller",
-      "Name": "Toggle Between Cockpit And Ship View - Left Stick Button",
-      "Description": "View Player Controls",
+      "Name": "Toggle S-Foils - Right Stick Button",
+      "Description": "Open or fold the wings; folded wings give cruise speed",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "View Controls - Controller",
+      "Name": "Enter / Exit Planet - Y Button",
+      "Description": "Start or leave atmospheric entry over a planet",
+      "Function": "none",
+      "Type": "ContentButton02",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "View Controls - Controller",
+      "Name": "Open Galaxy Map - Back / Select Button",
+      "Description": "Open or close the navigable star map in Galaxy Mode",
       "Function": "none",
       "Type": "ContentButton02",
       "Variable": "none"

@@ -32,10 +32,22 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -4659296474844562489, guid: 6a5f696734265534a8309c2c327df862, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: d9e01c1e1a701dc4ab13a16abdf4b97b, type: 2}
+    - target: {fileID: -3209177160946056566, guid: 6a5f696734265534a8309c2c327df862, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 6f98e469ed1f8db47a865a2d4946a841, type: 2}
     - target: {fileID: 919132149155446097, guid: 6a5f696734265534a8309c2c327df862, type: 3}
       propertyPath: m_Name
       value: rebel_pilot
       objectReference: {fileID: 0}
+    - target: {fileID: 2396007991784843495, guid: 6a5f696734265534a8309c2c327df862, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31cd709e61308f94fab3a7a113e6cdf9, type: 2}
     - target: {fileID: 2546257380403934257, guid: 6a5f696734265534a8309c2c327df862, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 

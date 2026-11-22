@@ -130,3 +130,12 @@ necesita escenas ni prefabs modificados:
   planeta devuelve el control a la nave. Mientras estás a pie, el vuelo y `SoftLanding` están
   desactivados para que WASD no acelere ni provoque el despegue.
 - Si el terreno no tiene tiles `Tile_x_y` debajo, el modo no se activa y se avisa en el log.
+
+## 7. Materiales de la cabeza
+
+El FBX incluye las mallas `mat_head`, `mat_eyes` y `mat_teeth`. El prefab variant
+`rebel_pilot.prefab` sobrescribe sus materiales con `MAT_Head`, `MAT_Eyes` y `MAT_Teeth`
+(en `Assets/Data/objects/readyrooms/characters/rebel_pilot/Materials/`), todos URP Lit y con las
+texturas de `head/`: color `T_Heads_Roger_01_CS`, normal `T_Heads_Roger_01_NW`, oclusión
+`T_Heads_Base_Male_RSSSS`, ojos `T_Eyes_Brown_C` y dientes `T_MP_Teeth_D`. Se aplican como
+overrides del prefab para no modificar el FBX importado ni dejar el material gris `Lit`.

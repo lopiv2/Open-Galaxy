@@ -53,7 +53,7 @@ public static class TorpedoSystemFunctions
             }
         }
 
-        if (tube1 == null & tube2 == null & tube3 == null & tube4 == null)
+        if (tube1 == null && tube2 == null && tube3 == null && tube4 == null)
         {
             torpedoSystem.hasTorpedos = false;
         }
@@ -73,11 +73,11 @@ public static class TorpedoSystemFunctions
     {
         TargetingSystem targetingSystem = torpedoSystem.ship.targetingSystem;
 
-        if (targetingSystem.target != null & torpedoSystem.weaponManagement.weaponType == "torpedos" & torpedoSystem.torpedoNumber > 0)
+        if (targetingSystem.target != null && torpedoSystem.weaponManagement.weaponType == "torpedos" && torpedoSystem.torpedoNumber > 0)
         {
             if (targetingSystem.target.activeSelf == true)
             {
-                if (targetingSystem.targetForward > 0.99f & targetingSystem.targetDistance < 4000)
+                if (targetingSystem.targetForward > 0.99f && targetingSystem.targetDistance < 4000)
                 {
 
                     if (torpedoSystem.torpedoLockingOn != true)
@@ -133,7 +133,7 @@ public static class TorpedoSystemFunctions
             return;
         }
 
-        if (torpedoSystem.weaponManagement.fireWeapon == true & torpedoSystem.ship.isAI == false)
+        if (torpedoSystem.weaponManagement.fireWeapon == true && torpedoSystem.ship.isAI == false)
         {
             FireTorpedo(torpedoSystem);
         }
@@ -142,7 +142,7 @@ public static class TorpedoSystemFunctions
     //This fires a torpedo
     public static void FireTorpedo(TorpedoSystem torpedoSystem)
     {
-        if (torpedoSystem.hasTorpedos == true & torpedoSystem.torpedoNumber > 0 & torpedoSystem.weaponManagement.weaponType == "torpedos" & torpedoSystem.torpedoPressedTime < Time.time & torpedoSystem.weaponManagement.weaponsLock == false)
+        if (torpedoSystem.hasTorpedos && torpedoSystem.torpedoNumber > 0 && torpedoSystem.weaponManagement.weaponType == "torpedos" && torpedoSystem.torpedoPressedTime < Time.time && torpedoSystem.weaponManagement.weaponsLock == false)
         {
             float spatialBlend = 1;
             string mixer = "External";
@@ -190,7 +190,7 @@ public static class TorpedoSystemFunctions
                     AudioFunctions.PlayAudioClip(torpedoSystem.ship.audioManager, torpedo.launchAudio, mixer, torpedoTubes[torpedoSystem.torpedoCycleNumber].transform.position, spatialBlend, 1, 500, 0.9f);
                 }
 
-                if (torpedoSystem.ship.isAI == false & torpedoSystem.ship.ogInput.keyboardAndMouse == false)
+                if (torpedoSystem.ship.isAI == false && torpedoSystem.ship.ogInput.keyboardAndMouse == false)
                 {
                     Task b = new Task(OGInputFunctions.ShakeControllerForSetTime(0.1f, 0.50f, 0.50f));
                 }
@@ -220,7 +220,7 @@ public static class TorpedoSystemFunctions
                     AudioFunctions.PlayAudioClip(torpedoSystem.ship.audioManager, torpedo02.launchAudio, mixer, torpedoTubes[torpedoSystem.torpedoCycleNumber].transform.position, spatialBlend, 1, 500, 0.9f);
                 }
 
-                if (torpedoSystem.ship.isAI == false & torpedoSystem.ship.ogInput.keyboardAndMouse == false)
+                if (torpedoSystem.ship.isAI == false && torpedoSystem.ship.ogInput.keyboardAndMouse == false)
                 {
                     Task b = new Task(OGInputFunctions.ShakeControllerForSetTime(0.1f, 0.55f, 0.55f));
                 }
@@ -271,7 +271,7 @@ public static class TorpedoSystemFunctions
 
                 }
 
-                if (torpedoSystem.ship.isAI == false & torpedoSystem.ship.ogInput.keyboardAndMouse == false)
+                if (torpedoSystem.ship.isAI == false && torpedoSystem.ship.ogInput.keyboardAndMouse == false)
                 {
                     Task b = new Task(OGInputFunctions.ShakeControllerForSetTime(0.1f, 0.60f, 0.60f));
                 }
@@ -435,13 +435,13 @@ public static class TorpedoSystemFunctions
     //This toggles the ships weapon mode for torpedos
     public static void ToggleWeaponMode(TorpedoSystem torpedoSystem)
     {
-        if (torpedoSystem.weaponManagement.toggleWeaponNumber == true & Time.time > torpedoSystem.torpedoModePressedTime & torpedoSystem.weaponManagement.weaponType == "torpedos")
+        if (torpedoSystem.weaponManagement.toggleWeaponNumber == true && Time.time > torpedoSystem.torpedoModePressedTime && torpedoSystem.weaponManagement.weaponType == "torpedos")
         {
-            if (torpedoSystem.weaponManagement.weaponMode == "single" & torpedoSystem.torpedoTube2 != null & torpedoSystem.torpedoNumber > 1)
+            if (torpedoSystem.weaponManagement.weaponMode == "single" && torpedoSystem.torpedoTube2 != null && torpedoSystem.torpedoNumber > 1)
             {
                 torpedoSystem.weaponManagement.weaponMode = "dual";
             }
-            else if (torpedoSystem.weaponManagement.weaponMode == "dual" & torpedoSystem.torpedoTube3 != null & torpedoSystem.torpedoTube4 != null & torpedoSystem.torpedoNumber > 3)
+            else if (torpedoSystem.weaponManagement.weaponMode == "dual" && torpedoSystem.torpedoTube3 != null && torpedoSystem.torpedoTube4 != null && torpedoSystem.torpedoNumber > 3)
             {
                 torpedoSystem.weaponManagement.weaponMode = "all";
             }

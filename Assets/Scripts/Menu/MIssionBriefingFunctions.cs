@@ -28,7 +28,7 @@ public static class MissionBriefingFunctions
         GameObject environment = GameObject.Instantiate(environmentGO) as GameObject;
 
         //This moves the camera into position
-        if (model != "none" & model != "" & noZoom != true) //This checks to see whether the camera should zoom in or not
+        if (model != "none" && model != "" && noZoom != true) //This checks to see whether the camera should zoom in or not
         {
             Camera camera = environment.GetComponentInChildren<Camera>();
             Vector3 endPosition = camera.transform.localPosition;
@@ -82,11 +82,11 @@ public static class MissionBriefingFunctions
         //This starts the audio playing
         AudioSource missionBriefingAudio = null;
 
-        if (audioName != "none" & internalAudioFile != "true")
+        if (audioName != "none" && internalAudioFile != "true")
         {
             missionBriefingAudio = AudioFunctions.PlayMissionAudioClip(null, audioName, "UI", new Vector3(0, 0, 0), 0, 1, 500, 1f, 1, distortion, distortionLevel, true);
         }
-        else if (audioName != "none" & internalAudioFile == "true")
+        else if (audioName != "none" && internalAudioFile == "true")
         {
             missionBriefingAudio = AudioFunctions.PlayMissionAudioClip(null, audioName, "UI", new Vector3(0, 0, 0), 0, 1, 500, 1f, 1, distortion, distortionLevel, true);
         }

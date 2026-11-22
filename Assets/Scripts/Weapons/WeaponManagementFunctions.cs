@@ -25,7 +25,7 @@ public class WeaponManagementFunctions
 
         if (weaponManagement.hasPlasma == false)
         {
-            if (weaponManagement.toggleWeapons == true & weaponManagement.toggleWeaponPressedTime < Time.time & weaponManagement.ship.damageSystem.isDisabled == false & weaponManagement.preventWeaponChange == false)
+            if (weaponManagement.toggleWeapons && weaponManagement.toggleWeaponPressedTime < Time.time && weaponManagement.ship.damageSystem.isDisabled == false && weaponManagement.preventWeaponChange == false)
             {
                 if (hasTorpedos == true & torpedoNumber > 0 & weaponManagement.hasIon == true)
                 {
@@ -80,7 +80,7 @@ public class WeaponManagementFunctions
                         AudioFunctions.PlayAudioClip(weaponManagement.ship.audioManager, "beep03_weaponchange", "Cockpit", weaponManagement.gameObject.transform.position, 0, 1, 500, 1, 100);
                     }
                 }
-                else if (hasTorpedos == false & weaponManagement.hasIon == true || hasTorpedos == true & torpedoNumber <= 0 & weaponManagement.hasIon == true)
+                else if (hasTorpedos == true && weaponManagement.hasIon == false || hasTorpedos == true && torpedoNumber <= 0 && weaponManagement.hasIon == true)
                 {
                     if (weaponManagement.weaponType == "" || weaponManagement.weaponType == "---" || weaponManagement.weaponType == "torpedos" || weaponManagement.weaponType == "plasma")
                     {
@@ -117,7 +117,7 @@ public class WeaponManagementFunctions
                 weaponManagement.weaponMode = "---";
             }
 
-            if (hasTorpedos == true & torpedoNumber <= 0 & weaponManagement.weaponType == "torpedos")
+            if (hasTorpedos && torpedoNumber <= 0 && weaponManagement.weaponType == "torpedos")
             {
                 weaponManagement.weaponType = "lasers";
                 weaponManagement.weaponMode = "single";
@@ -127,7 +127,7 @@ public class WeaponManagementFunctions
         }
         else
         {
-            if (weaponManagement.toggleWeapons == true & weaponManagement.toggleWeaponPressedTime < Time.time & weaponManagement.ship.damageSystem.isDisabled == false & weaponManagement.preventWeaponChange == false)
+            if (weaponManagement.toggleWeapons && weaponManagement.toggleWeaponPressedTime < Time.time && weaponManagement.ship.damageSystem.isDisabled == false && weaponManagement.preventWeaponChange == false)
             {
                 if (hasTorpedos == true & torpedoNumber > 0)
                 {
@@ -176,7 +176,7 @@ public class WeaponManagementFunctions
                 weaponManagement.weaponMode = "---";
             }
 
-            if (hasTorpedos == true & torpedoNumber <= 0 & weaponManagement.weaponType == "torpedos")
+            if (hasTorpedos && torpedoNumber <= 0 && weaponManagement.weaponType == "torpedos")
             {
                 weaponManagement.weaponType = "plasma";
                 weaponManagement.weaponMode = "single";

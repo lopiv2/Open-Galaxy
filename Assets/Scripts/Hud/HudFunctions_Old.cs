@@ -93,7 +93,7 @@ public static class HudFunctions_Old
         {
             if (mode == "hud")
             {
-                if (hud.hudCG != null & hud.fadeCG & hud.letterboxCG != null)
+                if (hud.hudCG != null && hud.fadeCG && hud.letterboxCG != null)
                 {
                     Task a = new Task(FadeInCanvasGroup(hud.hudCG, 0.5f));
                     Task b = new Task(FadeOutCanvasGroup(hud.fadeCG, 0.5f));
@@ -103,7 +103,7 @@ public static class HudFunctions_Old
             }
             else if (mode == "fade")
             {
-                if (hud.hudCG != null & hud.fadeCG & hud.letterboxCG != null)
+                if (hud.hudCG != null && hud.fadeCG && hud.letterboxCG != null)
                 {
                     Task a = new Task(FadeOutCanvasGroup(hud.hudCG, 0.5f));
                     Task b = new Task(FadeInCanvasGroup(hud.fadeCG, 0.5f));
@@ -113,7 +113,7 @@ public static class HudFunctions_Old
             }
             else if (mode == "letterbox")
             {
-                if (hud.hudCG != null & hud.fadeCG & hud.letterboxCG != null)
+                if (hud.hudCG != null && hud.fadeCG && hud.letterboxCG != null)
                 {
                     Task a = new Task(FadeOutCanvasGroup(hud.hudCG, 0.5f));
                     Task b = new Task(FadeOutCanvasGroup(hud.fadeCG, 0.5f));
@@ -123,7 +123,7 @@ public static class HudFunctions_Old
             }
             else if (mode == "none")
             {
-                if (hud.hudCG != null & hud.fadeCG & hud.letterboxCG != null)
+                if (hud.hudCG != null && hud.fadeCG && hud.letterboxCG != null)
                 {
                     Task a = new Task(FadeOutCanvasGroup(hud.hudCG, 0.5f));
                     Task b = new Task(FadeOutCanvasGroup(hud.fadeCG, 0.5f));
@@ -157,7 +157,7 @@ public static class HudFunctions_Old
             hud.radarPool = new List<GameObject>();
         }
 
-        if (hud.radarPool != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.radarPool != null && hud.ship != null && Time.timeScale != 0)
         {
             if (hud.ship.targetingSystem.target != null)
             {
@@ -257,7 +257,7 @@ public static class HudFunctions_Old
             if (shieldMeter != null) { hud.shieldMeter = shieldMeter.GetComponent<Slider>(); }
         }
 
-        if (hud.shieldMeter != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.shieldMeter != null && hud.ship != null && Time.timeScale != 0)
         {
             hud.shieldMeter.value = hud.ship.energyManagementSystem.shieldPower;
         }
@@ -272,7 +272,7 @@ public static class HudFunctions_Old
             if (engineMeter != null) { hud.engineMeter = engineMeter.GetComponent<Slider>(); }
         }
 
-        if (hud.engineMeter != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.engineMeter != null && hud.ship != null && Time.timeScale != 0)
         {
             hud.engineMeter.value = hud.ship.energyManagementSystem.enginePower;
         }
@@ -287,7 +287,7 @@ public static class HudFunctions_Old
             if (laserMeter != null) { hud.laserMeter = laserMeter.GetComponent<Slider>(); }
         }
 
-        if (hud.laserMeter != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.laserMeter != null && hud.ship != null && Time.timeScale != 0)
         {
             hud.laserMeter.value = hud.ship.energyManagementSystem.energyWeaponPower;
         }
@@ -302,7 +302,7 @@ public static class HudFunctions_Old
             if (WEPMeter != null) { hud.WEPMeter = WEPMeter.GetComponent<Slider>(); }
         }
 
-        if (hud.WEPMeter != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.WEPMeter != null && hud.ship != null && Time.timeScale != 0)
         {
             hud.WEPMeter.value = hud.ship.energyManagementSystem.wepLevel;
         }
@@ -317,7 +317,7 @@ public static class HudFunctions_Old
             if (chargeMeter != null) { hud.chargeMeter = chargeMeter.GetComponent<Slider>(); }
         }
 
-        if (hud.chargeMeter != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.chargeMeter != null && hud.ship != null && Time.timeScale != 0)
         {
             hud.chargeMeter.value = hud.ship.energyManagementSystem.energyWeaponCharge;
         }
@@ -332,7 +332,7 @@ public static class HudFunctions_Old
             if (speedText != null) { hud.speedText = speedText.GetComponent<Text>(); }
         }
 
-        if (hud.speedText != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.speedText != null && hud.ship != null && Time.timeScale != 0)
         {
             if (hud.ship.flightControlSystem_Small.shipRigidbody != null)
             {
@@ -350,7 +350,7 @@ public static class HudFunctions_Old
             if (matchSpeedText != null) { hud.matchSpeedText = matchSpeedText.GetComponent<Text>(); }
         }
 
-        if (hud.matchSpeedText != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.matchSpeedText != null && hud.ship != null && Time.timeScale != 0)
         {
             if (hud.ship.flightControlSystem_Small.matchSpeed == true)
             {
@@ -396,7 +396,7 @@ public static class HudFunctions_Old
             if (shieldRearOutside != null) { hud.shieldRearOutside = shieldRearOutside.GetComponent<RawImage>(); }
         }
 
-        if (hud.shieldForwardOutside != null & hud.shieldForwardInside != null & hud.hull != null & hud.shieldRearInside != null & hud.shieldRearOutside != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.shieldForwardOutside != null && hud.shieldForwardInside != null && hud.hull != null && hud.shieldRearInside != null && hud.shieldRearOutside != null && hud.ship != null && Time.timeScale != 0)
         {
             float shieldRating = hud.ship.shieldRating / 4f;
             float hullRating = hud.ship.hullRating;
@@ -443,7 +443,7 @@ public static class HudFunctions_Old
 
         if (hud.scene != null)
         {
-            if(hud.ship == null & hud.scene.mainShip != null)
+            if(hud.ship == null && hud.scene.mainShip != null)
             {
                 ship = hud.scene.mainShip.GetComponent<Ship>();
                 hud.ship = ship;
@@ -459,7 +459,7 @@ public static class HudFunctions_Old
                 if (activeWeaponText != null) { hud.activeWeaponText = activeWeaponText.GetComponent<Text>(); }
             }
 
-            if (hud.activeWeaponText != null & hud.ship.weaponManagement != null & Time.timeScale != 0)
+            if (hud.activeWeaponText != null && hud.ship.weaponManagement != null && Time.timeScale != 0)
             {
                 if (hud.ship.weaponManagement.weaponType == "lasers")
                 {
@@ -503,9 +503,9 @@ public static class HudFunctions_Old
                 if (weaponModeText != null) { hud.weaponModeText = weaponModeText.GetComponent<Text>(); }
             }
 
-            if (hud.weaponModeText != null & hud.ship.energyWeapon != null & Time.timeScale != 0)
+            if (hud.weaponModeText != null && hud.ship.energyWeapon != null && Time.timeScale != 0)
             {
-                if (hud.ship.weaponManagement.hasRapidFire == true & hud.ship.weaponManagement.weaponMode == "rapid")
+                if (hud.ship.weaponManagement.hasRapidFire && hud.ship.weaponManagement.weaponMode == "rapid")
                 {
                     SetTextColour("#EBB426", hud.weaponModeText);
 
@@ -553,7 +553,7 @@ public static class HudFunctions_Old
             if (weaponNumberText != null) { hud.weaponNumberText = weaponNumberText.GetComponent<Text>(); }
         }
 
-        if (hud.weaponNumberText != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.weaponNumberText != null && hud.ship != null && Time.timeScale != 0)
         {
             //To add back in once relationship between torpedos and energy weapons is redefined
             //if (hud.weaponManagement.weaponType == "lasers")
@@ -580,7 +580,7 @@ public static class HudFunctions_Old
             if (WEPText != null) { hud.WEPText = WEPText.GetComponent<Text>(); }
         }
 
-        if (hud.WEPText != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.WEPText != null && hud.ship != null && Time.timeScale != 0)
         {
             if (hud.ship.flightControlSystem_Small.wep == true)
             {
@@ -602,7 +602,7 @@ public static class HudFunctions_Old
             if (systemsText != null) { hud.systemsText = systemsText.GetComponent<Text>(); }
         }
 
-        if (hud.systemsText != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.systemsText != null && hud.ship != null && Time.timeScale != 0)
         {
             hud.systemsText.text = hud.ship.energyManagementSystem.systemsLevel.ToString("000");
         }
@@ -643,9 +643,9 @@ public static class HudFunctions_Old
             if (targetType != null) { hud.targetType = targetType.GetComponent<Text>(); }
         }
 
-        if (hud.targetType != null & hud.ship != null & Time.timeScale != 0)
+        if (hud.targetType != null && hud.ship != null && Time.timeScale != 0)
         {
-            if (hud.ship.targetingSystem.target != null & hud.ship.targetingSystem.targetAllegiance != null & hud.ship.targetingSystem.targetType != null) 
+            if (hud.ship.targetingSystem.target != null && hud.ship.targetingSystem.targetAllegiance != null && hud.ship.targetingSystem.targetType != null) 
             {
                 hud.targetType.text = hud.ship.targetingSystem.targetAllegiance.ToUpper() + " " + hud.ship.targetingSystem.targetType.ToUpper();
             }

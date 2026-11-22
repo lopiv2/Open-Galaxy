@@ -99,3 +99,13 @@ Es por los nombres, no por la estructura (la jerarquía sí es humanoid). La sol
 duplicar el armature + mallas en Blender y renombrar **sólo en la copia** los huesos de la tabla a
 los nombres de Unity, renombrando también los vertex groups correspondientes para que los pesos
 sigan pegados. El original queda intacto; dime si quieres que prepare esa copia.
+
+## 5. Animación de caminar genérica
+
+`Assets/Data/objects/readyrooms/characters/animations/Walking.fbx` está importada como **Humanoid**
+(Avatar `WalkingAvatar`, válido) con el clip renombrado `Walking`, 1,033 s y `Loop Time` activado.
+El controlador `Walking.controller` tiene un único estado `Walk` con ese clip y está asignado al
+Animator de `rebel_pilot` (con `Apply Root Motion = false` para que camine en el sitio). Cualquier
+otro personaje con Avatar Humanoid puede usar el mismo controlador sin reimportar el clip.
+Los personajes que no tienen Avatar Humanoid (los droides del readyroom) no pueden retargetearlo
+hasta que se les configure uno.

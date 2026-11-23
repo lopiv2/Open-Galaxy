@@ -236,10 +236,12 @@ public class TerrainGenerator
         return Mathf.Lerp(height, carved, strength * region);
     }
 
-    // Baked per-vertex masks for the shader. R = lower edge of a mesa wall,
-    // G = cliff region strength, B = plateau strength. The cliff-foot mask is
-    // high where the plateau ramps up but has not reached the flat top yet,
-    // so overlays can cover the sand at the bottom without painting the wall.
+    // Baked per-vertex masks for the shader. R = sand apron around a mesa
+    // foot, G = cliff region strength, B = plateau strength. The apron samples
+    // a fixed world-space radius so it stays consistent between detailed and
+    // distant tiles and is wide enough to be visible from flight view.
+    // sampleStep is kept for caller compatibility; a tile-dependent radius
+    // would make the mask change at LOD seams.
     public Vector3 SampleCliffVertexMasks(float worldX, float worldZ, float sampleStep)
     {
         if (cliffsEnabled == false || cliffStrength <= 0.0001f)
@@ -250,29 +252,24 @@ public class TerrainGenerator
             return Vector3.zero;
 
         float plateau = SampleCliffPlateau(worldX, worldZ);
-        float distance = Mathf.Max(4f, sampleStep * 0.6f);
+        const float footRadius = 220f;
 
-        float gradientX = SampleCliffPlateau(worldX + distance, worldZ)
-            - SampleCliffPlateau(worldX - distance, worldZ);
-        float gradientZ = SampleCliffPlateau(worldX, worldZ + distance)
-            - SampleCliffPlateau(worldX, worldZ - distance);
-        float gradient = Mathf.Sqrt(gradientX * gradientX + gradientZ * gradientZ)
-            / (2f * distance);
+        float nearPlateau = plateau;
+        nearPlateau = Mathf.Max(nearPlateau,
+            SampleCliffPlateau(worldX + footRadius, worldZ));
+        nearPlateau = Mathf.Max(nearPlateau,
+            SampleCliffPlateau(worldX - footRadius, worldZ));
+        nearPlateau = Mathf.Max(nearPlateau,
+            SampleCliffPlateau(worldX, worldZ + footRadius));
+        nearPlateau = Mathf.Max(nearPlateau,
+            SampleCliffPlateau(worldX, worldZ - footRadius));
 
-        // A plateau edge spans roughly edgeWidth / maskFrequency metres. Use
-        // that to keep the foot band stable when either JSON value changes.
-        float referenceGradient = Mathf.Max(0.00001f, cliffMaskFrequency)
-            / Mathf.Max(0.002f, cliffEdgeWidth);
-        // Mathf.SmoothStep interpolates from 0 to 1 with a normalised t,
-        // unlike HLSL smoothstep(edge0, edge1, value).
-        float wallEdge = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(
-            referenceGradient * 0.08f,
-            referenceGradient * 0.55f,
-            gradient));
+        // Keep the apron on the low ground beside a wall. Mathf.SmoothStep
+        // takes a normalised t, unlike HLSL smoothstep(edge0, edge1, value).
         float lowerSide = 1f - Mathf.SmoothStep(0f, 1f,
-            Mathf.InverseLerp(0.06f, 0.48f, plateau));
+            Mathf.InverseLerp(0.05f, 0.40f, plateau));
 
-        return new Vector3(region * wallEdge * lowerSide, region, plateau);
+        return new Vector3(region * nearPlateau * lowerSide, region, plateau);
     }
 
     private float SampleTerrainHeight(float worldX, float worldZ)

@@ -538,7 +538,9 @@
                 }
 
                 float width = max(0.05, pB.x);
-                float feather = max(0.05, pB.y);
+                // Feather is the soft edge around the configured width. Capping
+                // it keeps a large value from swallowing width changes.
+                float feather = clamp(pB.y, 0.05, width);
                 float edgeNoise = (ValueNoise(warped * noiseScale * 3.0 + seedOffset)
                     - 0.5) * feather * 0.15;
 

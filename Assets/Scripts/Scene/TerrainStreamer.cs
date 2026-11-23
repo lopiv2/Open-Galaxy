@@ -953,8 +953,15 @@ public class TerrainStreamer : MonoBehaviour
 
             if (runtime == null || !runtime.active)
             {
-                material.SetFloat("_Overlay" + suffix + "A.y", 0f);
-                material.SetFloat("_Overlay" + suffix + "E.z", 0f);
+                // Material.SetFloat cannot address a single vector component;
+                // write the whole vector and clear only the relevant channel.
+                Vector4 inactiveA = material.GetVector("_Overlay" + suffix + "A");
+                inactiveA.y = 0f;
+                material.SetVector("_Overlay" + suffix + "A", inactiveA);
+
+                Vector4 inactiveE = material.GetVector("_Overlay" + suffix + "E");
+                inactiveE.z = 0f;
+                material.SetVector("_Overlay" + suffix + "E", inactiveE);
                 continue;
             }
 

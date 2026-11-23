@@ -22,6 +22,7 @@ public class GalaxyMapPlanetAdder : EditorWindow
     private const string HyperrouteStopsProperty = "hyperrouteStops";
     private const string StatusMessageKey = "OpenGalaxy.GalaxyMapPlanetAdder.Status";
     private const string StatusTypeKey = "OpenGalaxy.GalaxyMapPlanetAdder.StatusType";
+    private const int GridColumns = 4;
 
     private static readonly string[] RoutePresets =
     {
@@ -41,6 +42,8 @@ public class GalaxyMapPlanetAdder : EditorWindow
 
     private string[] allPlanets = new string[0];
     private string[] filteredPlanets = new string[0];
+    private string[] mapPlanets = new string[0];
+    private Vector2 mapGridScroll = Vector2.zero;
     private string cachedSearch;
     private StarSystems starSystems;
     private bool dataLoaded;
@@ -56,7 +59,13 @@ public class GalaxyMapPlanetAdder : EditorWindow
     [UnityEditor.MenuItem("Tools/Open Galaxy/Add Planet to Galaxy Map")]
     private static void ShowWindow()
     {
-        GetWindow<GalaxyMapPlanetAdder>("Add Planet to Galaxy Map");
+        GalaxyMapPlanetAdder window = GetWindow<GalaxyMapPlanetAdder>("Add Planet to Galaxy Map");
+        window.minSize = new Vector2(560f, 620f);
+
+        Rect position = window.position;
+        position.width = Mathf.Max(position.width, 680f);
+        position.height = Mathf.Max(position.height, 760f);
+        window.position = position;
     }
 
     private void OnEnable()
@@ -118,10 +127,36 @@ public class GalaxyMapPlanetAdder : EditorWindow
         cachedSearch = null;
         dataLoaded = allPlanets.Length > 0;
 
+        RebuildMapPlanets();
+
         SetStatus(dataLoaded
             ? string.Format("Cargados {0} sistemas únicos desde StarSystems.json.", allPlanets.Length)
             : "StarSystems.json no contiene planetas con nombre.",
             dataLoaded ? MessageType.Info : MessageType.Warning);
+    }
+
+    // Planets that are actually reachable today: whitelist entries that also
+    // have data in StarSystems.json (same filter used by GetStartSystems()).
+    private void RebuildMapPlanets()
+    {
+        List<string> active = new List<string>();
+        HashSet<string> seen = new HashSet<string>();
+
+        foreach (string planetName in GalaxyModeFunctions.StartPlanets)
+        {
+            if (string.IsNullOrEmpty(planetName) || !seen.Add(planetName))
+            {
+                continue;
+            }
+
+            if (FindSystem(planetName) != null)
+            {
+                active.Add(planetName);
+            }
+        }
+
+        active.Sort(StringComparer.Ordinal);
+        mapPlanets = active.ToArray();
     }
 
     private StarSystem FindSystem(string planetName)
@@ -142,6 +177,80 @@ public class GalaxyMapPlanetAdder : EditorWindow
         return null;
     }
 
+    private void DrawMapGrid()
+    {
+        EditorGUILayout.LabelField("En el mapa ahora: " + mapPlanets.Length + " sistemas", EditorStyles.boldLabel);
+
+        if (mapPlanets.Length == 0)
+        {
+            EditorGUILayout.HelpBox("No hay sistemas activos en GalaxyModeFunctions.StartPlanets.", MessageType.Warning);
+            return;
+        }
+
+        int activeIndex = Array.IndexOf(mapPlanets, selectedPlanet);
+        if (activeIndex >= 0)
+        {
+            int newIndex = EditorGUILayout.Popup("Ir a sistema activo", activeIndex, mapPlanets);
+            if (newIndex != activeIndex)
+            {
+                SelectPlanet(mapPlanets[newIndex]);
+            }
+        }
+        else
+        {
+            EditorGUILayout.LabelField("Ir a sistema activo", selectedPlanet + " (todavía no está en el mapa)");
+        }
+
+        float buttonWidth = Mathf.Max(108f, (position.width - 52f) / GridColumns - 4f);
+
+        mapGridScroll = EditorGUILayout.BeginScrollView(mapGridScroll, GUILayout.Height(180f));
+        EditorGUILayout.BeginHorizontal();
+
+        for (int i = 0; i < mapPlanets.Length; i++)
+        {
+            string planetName = mapPlanets[i];
+            bool isSelected = planetName == selectedPlanet;
+            Color previousBackground = GUI.backgroundColor;
+            GUI.backgroundColor = isSelected ? new Color(0.35f, 0.72f, 1f, 1f) : Color.white;
+
+            if (GUILayout.Button("● " + planetName, EditorStyles.miniButton, GUILayout.Width(buttonWidth)))
+            {
+                SelectPlanet(planetName);
+            }
+
+            GUI.backgroundColor = previousBackground;
+
+            if ((i + 1) % GridColumns == 0)
+            {
+                EditorGUILayout.EndHorizontal();
+                EditorGUILayout.BeginHorizontal();
+            }
+        }
+
+        EditorGUILayout.EndHorizontal();
+        EditorGUILayout.EndScrollView();
+
+        int missing = GalaxyModeFunctions.StartPlanets.Length - mapPlanets.Length;
+        if (missing > 0)
+        {
+            EditorGUILayout.HelpBox(
+                missing + " nombre(s) de StartPlanets no tienen datos en StarSystems.json y no se muestran.",
+                MessageType.Warning);
+        }
+
+        EditorGUILayout.HelpBox(
+            "Pulsa cualquier punto para ver todos sus datos en el panel inferior. " +
+            "El punto azul es el sistema seleccionado.", MessageType.None);
+    }
+
+    private void SelectPlanet(string planetName)
+    {
+        selectedPlanet = planetName;
+        searchText = "";
+        cachedSearch = null;
+        Repaint();
+    }
+
     private void OnGUI()
     {
         EditorGUILayout.LabelField("Añadir planeta al mapa de la galaxia", EditorStyles.boldLabel);
@@ -156,7 +265,11 @@ public class GalaxyMapPlanetAdder : EditorWindow
         }
 
         EditorGUILayout.Space();
-        EditorGUILayout.LabelField("1 · Planeta", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("1 · Sistemas activos en el mapa", EditorStyles.boldLabel);
+        DrawMapGrid();
+
+        EditorGUILayout.Space();
+        EditorGUILayout.LabelField("2 · Buscar en StarSystems.json", EditorStyles.boldLabel);
 
         string newSearch = EditorGUILayout.TextField("Buscar", searchText);
         if (newSearch != searchText)
@@ -177,7 +290,11 @@ public class GalaxyMapPlanetAdder : EditorWindow
             if (index < 0) index = 0;
 
             int newIndex = EditorGUILayout.Popup("Planeta", index, filteredPlanets);
-            selectedPlanet = filteredPlanets[Mathf.Clamp(newIndex, 0, filteredPlanets.Length - 1)];
+            if (newIndex != index)
+            {
+                SelectPlanet(filteredPlanets[Mathf.Clamp(newIndex, 0, filteredPlanets.Length - 1)]);
+            }
+
             EditorGUILayout.LabelField("Sistemas visibles", filteredPlanets.Length + " / " + allPlanets.Length);
         }
 
@@ -186,7 +303,7 @@ public class GalaxyMapPlanetAdder : EditorWindow
         if (system != null)
         {
             EditorGUILayout.Space();
-            EditorGUILayout.LabelField("2 · Datos del sistema (solo lectura)", EditorStyles.boldLabel);
+            EditorGUILayout.LabelField("3 · Datos del sistema (solo lectura)", EditorStyles.boldLabel);
             EditorGUILayout.LabelField("Sistema", system.System);
             EditorGUILayout.LabelField("Región / Sector", (system.Region ?? "-") + " / " + (system.Sector ?? "-"));
             EditorGUILayout.LabelField("Grid / Facción", (system.Grid ?? "-") + " / " + (system.faction ?? "-"));
@@ -205,7 +322,7 @@ public class GalaxyMapPlanetAdder : EditorWindow
         }
 
         EditorGUILayout.Space();
-        EditorGUILayout.LabelField("3 · Opciones (opcional)", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("4 · Opciones (opcional)", EditorStyles.boldLabel);
 
         applyOffset = EditorGUILayout.ToggleLeft("Offset visual (solo si dos sistemas se solapan)", applyOffset);
         if (applyOffset)
@@ -428,6 +545,7 @@ public class GalaxyMapPlanetAdder : EditorWindow
         }
 
         AssetDatabase.Refresh();
+        RebuildMapPlanets();
 
         SetStatus((add ? "Añadido al mapa: " : "Quitado del mapa: ") + selectedPlanet +
                   ". Cambios:" + string.Join(", ", changes.ToArray()) + ".",

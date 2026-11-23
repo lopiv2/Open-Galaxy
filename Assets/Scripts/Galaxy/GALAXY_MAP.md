@@ -118,11 +118,17 @@
 
 `Tools > Open Galaxy > Add Planet to Galaxy Map` (`Assets/Editor/GalaxyMapPlanetAdder.cs`):
 
-1. Buscar el planeta en el desplegable (lista de los nombres únicos de
-   `StarSystems.json`; el contador muestra `visibles / total`).
-2. Opcionalmente marcar **offset visual** (solo para sistemas que se solapan
+1. La ventana se abre ancha y arriba muestra **todos los sistemas ya activos**
+   (los nombres de `StartPlanets` que tienen datos en el JSON): un grid de
+   puntos clicables y un desplegable `Ir a sistema activo`. Pulsar cualquier
+   punto rellena el panel de datos inferior, así no hace falta buscar sistema
+   por sistema para saber si está añadido. El punto azul marca la selección.
+2. Para añadir otro, buscar el planeta en el desplegable de la sección 2
+   (lista de los nombres únicos de `StarSystems.json`; el contador muestra
+   `visibles / total`).
+3. Opcionalmente marcar **offset visual** (solo para sistemas que se solapan
    incluso con zoom máximo) y/o **parada de hiperruta** (ruta + `order`).
-3. Pulsar **Añadir al mapa**. La herramienta escribe el nombre exacto en
+4. Pulsar **Añadir al mapa**. La herramienta escribe el nombre exacto en
    `GalaxyModeFunctions.StartPlanets`, añade el offset a `MapDisplayOffsets`
    y/o el `hyperrouteStops` en la entrada del JSON, y refreshea Unity.
    **Quitar del mapa** revierte la whitelist y el offset (no borra datos

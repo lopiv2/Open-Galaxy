@@ -589,7 +589,7 @@
                 float normalStrength,
                 float aoStrength,
                 float3 positionWS,
-                half cliffAmount)
+                half wallProtection)
             {
                 if (mask <= 0.001 || strength <= 0.001)
                     return;
@@ -597,7 +597,6 @@
                 float cameraDistance = distance(positionWS, _WorldSpaceCameraPos);
                 half fade = fadeDistance <= 0.0 ? 1.0h : 1.0h - smoothstep(
                     fadeDistance * 0.6, fadeDistance, cameraDistance);
-                half wallProtection = saturate(1.0h - cliffAmount * 0.9h);
                 half amount = saturate(mask * strength * fade * wallProtection);
 
                 if (amount <= 0.001)
@@ -620,6 +619,15 @@
                     positionWS,
                     uv,
                     normalStrength * amount);
+            }
+
+            // Cliff-foot masks are baked from the terrain shape and already
+            // exclude the wall, so they must not be weakened by slope checks.
+            half OverlayWallProtection(float mode, half cliffAmount)
+            {
+                return abs(mode - 1.0f) < 0.5f
+                    ? 1.0h
+                    : saturate(1.0h - cliffAmount * 0.9h);
             }
 
             half4 Frag(Varyings input) : SV_Target
@@ -733,7 +741,8 @@
                         groundColor, litNormal, overlayMask0,
                         _Overlay0A.x, _Overlay0A.z, _Overlay0A.y,
                         _Overlay0E.x, _Overlay0E.y,
-                        input.positionWS, cliffAmount);
+                        input.positionWS,
+                        OverlayWallProtection(_Overlay0A.w, cliffAmount));
 
                     float overlayMask1 = OverlayMask(input.positionWS,
                         input.cliffMask, _Overlay1A, _Overlay1B, _Overlay1C,
@@ -745,7 +754,8 @@
                         groundColor, litNormal, overlayMask1,
                         _Overlay1A.x, _Overlay1A.z, _Overlay1A.y,
                         _Overlay1E.x, _Overlay1E.y,
-                        input.positionWS, cliffAmount);
+                        input.positionWS,
+                        OverlayWallProtection(_Overlay1A.w, cliffAmount));
 
                     float overlayMask2 = OverlayMask(input.positionWS,
                         input.cliffMask, _Overlay2A, _Overlay2B, _Overlay2C,
@@ -757,7 +767,8 @@
                         groundColor, litNormal, overlayMask2,
                         _Overlay2A.x, _Overlay2A.z, _Overlay2A.y,
                         _Overlay2E.x, _Overlay2E.y,
-                        input.positionWS, cliffAmount);
+                        input.positionWS,
+                        OverlayWallProtection(_Overlay2A.w, cliffAmount));
                 }
 
                 // Cliff maps: two textures blended with world-space noise so
@@ -776,10 +787,15 @@
                     cliffBlend
                 );
 
+                // The baked foot mask keeps cliff textures on the wall and
+                // lets the coast sand show at the lower edge.
+                half cliffFootProtection = 1.0h
+                    - saturate(input.cliffMask.r);
+
                 half3 color = lerp(
                     groundColor,
                     cliffColor,
-                    cliffAmount
+                    cliffAmount * cliffFootProtection
                 );
 
                 Light mainLight = GetMainLight();

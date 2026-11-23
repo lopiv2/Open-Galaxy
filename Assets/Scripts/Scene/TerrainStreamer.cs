@@ -222,9 +222,10 @@ public class TerrainStreamer : MonoBehaviour
         sharedOuterMaterial.SetFloat("_CliffStart", cliffSlopeStart);
         sharedOuterMaterial.SetFloat("_CliffSoftness", Mathf.Max(0.001f, cliffSlopeSoftness));
 
-        // Distant ring: no close-up detail or overlay sampling.
+        // Distant ring: no close-up dune detail, but overlays are world-space
+        // masks and must stay visible when the ship is flying above the planet.
         sharedOuterMaterial.SetFloat("_DetailEnabled", 0f);
-        sharedOuterMaterial.SetFloat("_OverlayEnabled", 0f);
+        ApplyOverlayMaps(sharedOuterMaterial);
 
         Vector3 shipLocalPosition = tileParent.InverseTransformPoint(ship.position);
         currentShipTile = LocalPositionToTileCoordinate(shipLocalPosition);

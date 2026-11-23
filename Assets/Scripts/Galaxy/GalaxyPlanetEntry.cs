@@ -445,6 +445,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
         terrainGO.transform.rotation = Quaternion.identity;
         streamer = terrainGO.AddComponent<TerrainStreamer>();
         streamer.seed = seed;
+        streamer.planetName = scene.currentLocation;
         streamer.ship = scene.mainShip.transform;
         streamer.tileParent = terrainGO.transform;
         // Ground textures from JSON: per-planet override wins, then the
@@ -500,6 +501,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
         // Optional close-up detail set (<name>_d/_n/_h/_ao) from JSON.
         streamer.detailTextureType = system != null
             ? system.detailTexture : null;
+
+        // Per-planet overlays (cliff-foot sand, paths, city patches...).
+        // Missing block leaves the terrain exactly as before.
+        streamer.overlayConfig = system != null ? system.overlays : null;
     }
 
     private void UpdateOnPlanet()

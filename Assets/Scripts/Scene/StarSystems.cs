@@ -27,6 +27,8 @@ public class StarSystem
     // Optional base name of the close-up detail texture set. The four maps
     // are expected as <name>_d / _n / _h / _ao in the terrain textures folder.
     public string detailTexture;
+    // Optional per-planet texture overlays (paths, cliff-foot sand, cities...).
+    public TerrainOverlay[] overlays;
     // Optional per-planet cloud roof override (StarSystems.json). Zero/empty
     // means "use the PlanetTypes.json climate defaults for planetType".
     public float cloudCoverage;
@@ -68,6 +70,38 @@ public class CliffSettings
     public int verticesPerSide;
     public int outerVerticesPerSide;
     public float highDetailRadiusKm;
+}
+
+// Per-planet terrain texture overlays. Up to three are applied by
+// TerrainStreamer; missing/empty entries leave that slot unused.
+// mode: "patch", "cliffFoot", "path" or "poiPath".
+[System.Serializable]
+public class TerrainOverlay
+{
+    public bool enabled = true;
+    public string label;
+    // Base name of <name>_d/_n/_ao in the terrain textures folder.
+    public string texture;
+    public string mode = "patch";
+    public float tiling = 0.05f;
+    public float strength = 0.7f;
+    public float fadeDistance = 600f;
+    public float normalStrength = 0.6f;
+    public float aoStrength = 0.5f;
+    // Path controls (metres / radians).
+    public float width = 3f;
+    public float feather = 4f;
+    public float wanderAmplitude = 10f;
+    public float wanderFrequency = 0.002f;
+    public float angle = 0f;
+    public float offset = 0f;
+    // Patch / cliff-foot / edge breakup controls.
+    public float noiseScale = 0.002f;
+    public float threshold = 0.5f;
+    public float patchFeather = 0.12f;
+    public float seedOffset = 0f;
+    // If true, waypoints come from PlanetPOIs.json instead of a free trail.
+    public bool connectPois = false;
 }
 
 [System.Serializable]

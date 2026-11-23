@@ -26,6 +26,36 @@
         _DetailAOStrength ("Detail AO Strength", Range(0, 1)) = 0.8
         _DetailFadeDistance ("Detail Fade Distance", Float) = 350
 
+        [Header(Terrain Overlays)]
+        _OverlayEnabled ("Overlay Enabled", Float) = 0
+
+        _Overlay0Map ("Overlay 0 Albedo", 2D) = "white" {}
+        _Overlay0NormalMap ("Overlay 0 Normal", 2D) = "bump" {}
+        _Overlay0AOMap ("Overlay 0 AO", 2D) = "white" {}
+        _Overlay0A ("0 Tiling/Strength/Fade/Mode", Vector) = (0.05, 0, 600, 0)
+        _Overlay0B ("0 Width/Feather/Wander/Freq", Vector) = (3, 4, 0, 0.002)
+        _Overlay0C ("0 Noise/Threshold/Patch Feather/Seed", Vector) = (0.002, 0.5, 0.12, 0)
+        _Overlay0D ("0 Dir/Offset/Phase", Vector) = (1, 0, 0, 0)
+        _Overlay0E ("0 Normal/AO/Segments/Unused", Vector) = (0.5, 0.5, 0, 0)
+
+        _Overlay1Map ("Overlay 1 Albedo", 2D) = "white" {}
+        _Overlay1NormalMap ("Overlay 1 Normal", 2D) = "bump" {}
+        _Overlay1AOMap ("Overlay 1 AO", 2D) = "white" {}
+        _Overlay1A ("1 Tiling/Strength/Fade/Mode", Vector) = (0.05, 0, 600, 0)
+        _Overlay1B ("1 Width/Feather/Wander/Freq", Vector) = (3, 4, 0, 0.002)
+        _Overlay1C ("1 Noise/Threshold/Patch Feather/Seed", Vector) = (0.002, 0.5, 0.12, 0)
+        _Overlay1D ("1 Dir/Offset/Phase", Vector) = (1, 0, 0, 0)
+        _Overlay1E ("1 Normal/AO/Segments/Unused", Vector) = (0.5, 0.5, 0, 0)
+
+        _Overlay2Map ("Overlay 2 Albedo", 2D) = "white" {}
+        _Overlay2NormalMap ("Overlay 2 Normal", 2D) = "bump" {}
+        _Overlay2AOMap ("Overlay 2 AO", 2D) = "white" {}
+        _Overlay2A ("2 Tiling/Strength/Fade/Mode", Vector) = (0.05, 0, 600, 0)
+        _Overlay2B ("2 Width/Feather/Wander/Freq", Vector) = (3, 4, 0, 0.002)
+        _Overlay2C ("2 Noise/Threshold/Patch Feather/Seed", Vector) = (0.002, 0.5, 0.12, 0)
+        _Overlay2D ("2 Dir/Offset/Phase", Vector) = (1, 0, 0, 0)
+        _Overlay2E ("2 Normal/AO/Segments/Unused", Vector) = (0.5, 0.5, 0, 0)
+
         [Header(Neighbor Ground Textures)]
         _RightGroundMap ("Right Ground", 2D) = "white" {}
         _FrontGroundMap ("Front Ground", 2D) = "white" {}
@@ -110,6 +140,18 @@
             TEXTURE2D(_DetailOcclusionMap);
             SAMPLER(sampler_DetailOcclusionMap);
 
+            TEXTURE2D(_Overlay0Map);
+            TEXTURE2D(_Overlay0NormalMap);
+            TEXTURE2D(_Overlay0AOMap);
+
+            TEXTURE2D(_Overlay1Map);
+            TEXTURE2D(_Overlay1NormalMap);
+            TEXTURE2D(_Overlay1AOMap);
+
+            TEXTURE2D(_Overlay2Map);
+            TEXTURE2D(_Overlay2NormalMap);
+            TEXTURE2D(_Overlay2AOMap);
+
             CBUFFER_START(UnityPerMaterial)
 
                 half _BorderBlend;
@@ -135,6 +177,29 @@
                 half _DetailAOStrength;
                 half _DetailFadeDistance;
 
+                half _OverlayEnabled;
+
+                float4 _Overlay0A;
+                float4 _Overlay0B;
+                float4 _Overlay0C;
+                float4 _Overlay0D;
+                float4 _Overlay0E;
+                float4 _Overlay0Segments[8];
+
+                float4 _Overlay1A;
+                float4 _Overlay1B;
+                float4 _Overlay1C;
+                float4 _Overlay1D;
+                float4 _Overlay1E;
+                float4 _Overlay1Segments[8];
+
+                float4 _Overlay2A;
+                float4 _Overlay2B;
+                float4 _Overlay2C;
+                float4 _Overlay2D;
+                float4 _Overlay2E;
+                float4 _Overlay2Segments[8];
+
             CBUFFER_END
 
             struct Attributes
@@ -142,6 +207,7 @@
                 float4 positionOS : POSITION;
                 float3 normalOS   : NORMAL;
                 float2 uv         : TEXCOORD0;
+                float4 color      : COLOR;
             };
 
             struct Varyings
@@ -150,6 +216,7 @@
                 float2 uv         : TEXCOORD0;
                 float3 normalWS   : TEXCOORD1;
                 float3 positionWS : TEXCOORD2;
+                float4 cliffMask  : TEXCOORD3;
             };
 
             Varyings Vert(Attributes input)
@@ -168,6 +235,7 @@
                     NormalizeNormalPerVertex(normalInputs.normalWS);
 
                 output.uv = input.uv * _TextureTiling;
+                output.cliffMask = input.color;
 
                 return output;
             }
@@ -398,6 +466,162 @@
                     saturate(_DetailNormalStrength)));
             }
 
+            // Distance from a world position to a path segment. Used for POI paths.
+            float OverlaySegmentDistance(float2 p, float2 a, float2 b)
+            {
+                float2 segment = b - a;
+                float lengthSquared = max(dot(segment, segment), 0.0001);
+                float t = saturate(dot(p - a, segment) / lengthSquared);
+                return length(p - (a + segment * t));
+            }
+
+            // Procedural mask for one overlay slot.
+            // mode 0 = noise patches, 1 = baked cliff foot, 2 = free trail,
+            // 3 = polyline connecting POIs.
+            float OverlayMask(
+                float3 positionWS,
+                float4 cliffMask,
+                float4 pA,
+                float4 pB,
+                float4 pC,
+                float4 pD,
+                float4 pathSegments[8],
+                float segmentCount)
+            {
+                int mode = (int)(pA.w + 0.5);
+                float2 worldXZ = positionWS.xz;
+                float seedOffset = pC.w;
+                float noiseScale = max(0.00001, pC.x);
+
+                if (mode == 1)
+                {
+                    float breakup = ValueNoise(worldXZ * noiseScale + seedOffset);
+                    return saturate(cliffMask.r * lerp(0.35, 1.0,
+                        smoothstep(0.2, 0.8, breakup)));
+                }
+
+                if (mode == 0)
+                {
+                    float field = ValueNoise(worldXZ * noiseScale + seedOffset) * 0.65
+                        + ValueNoise(worldXZ * noiseScale * 2.7 + seedOffset + 13.7) * 0.35;
+                    return smoothstep(pC.y,
+                        pC.y + max(0.005, pC.z), field);
+                }
+
+                float directionLength = max(0.0001, length(pD.xy));
+                float2 direction = pD.xy / directionLength;
+                float2 perpendicular = float2(-direction.y, direction.x);
+                float along = dot(worldXZ, direction);
+
+                float noise = ValueNoise(float2(along * max(0.00001, pB.w), seedOffset));
+                float wander = (sin(along * pB.w + pD.w)
+                    + (noise - 0.5) * 2.0) * pB.z;
+                float2 warped = worldXZ + perpendicular * wander;
+
+                float distanceToPath = 1000000.0;
+
+                if (mode == 2)
+                {
+                    distanceToPath = abs(dot(warped, perpendicular) - pD.z);
+                }
+                else
+                {
+                    for (int i = 0; i < 8; i++)
+                    {
+                        if ((float)i >= segmentCount)
+                            break;
+
+                        float4 segment = pathSegments[i];
+                        distanceToPath = min(distanceToPath,
+                            OverlaySegmentDistance(warped, segment.xy, segment.zw));
+                    }
+                }
+
+                float width = max(0.05, pB.x);
+                float feather = max(0.05, pB.y);
+                float edgeNoise = (ValueNoise(warped * noiseScale * 3.0 + seedOffset)
+                    - 0.5) * feather * 0.8;
+
+                return 1.0 - smoothstep(width, width + feather,
+                    distanceToPath + edgeNoise);
+            }
+
+            half3 ApplyOverlayNormal(
+                TEXTURE2D_PARAM(normalTexture, normalSampler),
+                half3 baseNormalWS,
+                float3 positionWS,
+                float2 uv,
+                half strength)
+            {
+                if (strength <= 0.001h)
+                    return baseNormalWS;
+
+                half3 mapN = UnpackNormal(
+                    SAMPLE_TEXTURE2D(normalTexture, normalSampler, uv)
+                );
+
+                mapN.xy *= strength;
+
+                half3 q0 = ddx(positionWS);
+                half3 q1 = ddy(positionWS);
+                half2 st0 = ddx(uv);
+                half2 st1 = ddy(uv);
+
+                half3 N = normalize(baseNormalWS);
+                half3 T = normalize(q0 * st1.y - q1 * st0.y);
+                half3 B = -normalize(cross(N, T));
+                half3x3 TBN = half3x3(T, B, N);
+
+                return normalize(lerp(N, normalize(mul(mapN, TBN)),
+                    saturate(strength)));
+            }
+
+            void ApplyOverlayLayer(
+                TEXTURE2D_PARAM(albedoTex, albedoSampler),
+                TEXTURE2D_PARAM(normalTex, normalSampler),
+                TEXTURE2D_PARAM(aoTex, aoSampler),
+                inout half3 surfaceColor,
+                inout half3 surfaceNormal,
+                float mask,
+                float tiling,
+                float fadeDistance,
+                float strength,
+                float normalStrength,
+                float aoStrength,
+                float3 positionWS,
+                half cliffAmount)
+            {
+                if (mask <= 0.001 || strength <= 0.001)
+                    return;
+
+                float cameraDistance = distance(positionWS, _WorldSpaceCameraPos);
+                half fade = fadeDistance <= 0.0 ? 1.0h : 1.0h - smoothstep(
+                    fadeDistance * 0.6, fadeDistance, cameraDistance);
+                half wallProtection = saturate(1.0h - cliffAmount * 0.9h);
+                half amount = saturate(mask * strength * fade * wallProtection);
+
+                if (amount <= 0.001)
+                    return;
+
+                float2 uv = positionWS.xz * tiling;
+
+                half3 overlayColor = SAMPLE_TEXTURE2D(
+                    albedoTex, albedoSampler, uv).rgb;
+                surfaceColor = lerp(surfaceColor, overlayColor, amount);
+
+                half overlayAO = SAMPLE_TEXTURE2D(
+                    aoTex, aoSampler, uv).g;
+                surfaceColor *= lerp(1.0h, overlayAO,
+                    saturate(aoStrength * amount));
+
+                surfaceNormal = ApplyOverlayNormal(
+                    TEXTURE2D_ARGS(normalTex, normalSampler),
+                    surfaceNormal,
+                    positionWS,
+                    uv,
+                    normalStrength * amount);
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
                 half3 groundNormalWS = PerturbGroundNormal(
@@ -493,6 +717,48 @@
 
                 litNormal = normalize(lerp(groundNormalWS, litNormal,
                     detailAmount));
+
+                // Per-planet overlays: cliff-foot sand, paths, city patches.
+                // Masks are deterministic from the planet seed / baked cliff
+                // data and need no splatmap assets.
+                if (_OverlayEnabled > 0.5)
+                {
+                    float overlayMask0 = OverlayMask(input.positionWS,
+                        input.cliffMask, _Overlay0A, _Overlay0B, _Overlay0C,
+                        _Overlay0D, _Overlay0Segments, _Overlay0E.z);
+                    ApplyOverlayLayer(
+                        TEXTURE2D_ARGS(_Overlay0Map, sampler_DetailMap),
+                        TEXTURE2D_ARGS(_Overlay0NormalMap, sampler_DetailMap),
+                        TEXTURE2D_ARGS(_Overlay0AOMap, sampler_DetailMap),
+                        groundColor, litNormal, overlayMask0,
+                        _Overlay0A.x, _Overlay0A.z, _Overlay0A.y,
+                        _Overlay0E.x, _Overlay0E.y,
+                        input.positionWS, cliffAmount);
+
+                    float overlayMask1 = OverlayMask(input.positionWS,
+                        input.cliffMask, _Overlay1A, _Overlay1B, _Overlay1C,
+                        _Overlay1D, _Overlay1Segments, _Overlay1E.z);
+                    ApplyOverlayLayer(
+                        TEXTURE2D_ARGS(_Overlay1Map, sampler_DetailMap),
+                        TEXTURE2D_ARGS(_Overlay1NormalMap, sampler_DetailMap),
+                        TEXTURE2D_ARGS(_Overlay1AOMap, sampler_DetailMap),
+                        groundColor, litNormal, overlayMask1,
+                        _Overlay1A.x, _Overlay1A.z, _Overlay1A.y,
+                        _Overlay1E.x, _Overlay1E.y,
+                        input.positionWS, cliffAmount);
+
+                    float overlayMask2 = OverlayMask(input.positionWS,
+                        input.cliffMask, _Overlay2A, _Overlay2B, _Overlay2C,
+                        _Overlay2D, _Overlay2Segments, _Overlay2E.z);
+                    ApplyOverlayLayer(
+                        TEXTURE2D_ARGS(_Overlay2Map, sampler_DetailMap),
+                        TEXTURE2D_ARGS(_Overlay2NormalMap, sampler_DetailMap),
+                        TEXTURE2D_ARGS(_Overlay2AOMap, sampler_DetailMap),
+                        groundColor, litNormal, overlayMask2,
+                        _Overlay2A.x, _Overlay2A.z, _Overlay2A.y,
+                        _Overlay2E.x, _Overlay2E.y,
+                        input.positionWS, cliffAmount);
+                }
 
                 // Cliff maps: two textures blended with world-space noise so
                 // walls do not switch abruptly at tile borders.

@@ -236,6 +236,45 @@ public class TerrainGenerator
         return Mathf.Lerp(height, carved, strength * region);
     }
 
+    // Baked per-vertex masks for the shader. R = lower edge of a mesa wall,
+    // G = cliff region strength, B = plateau strength. The cliff-foot mask is
+    // high where the plateau ramps up but has not reached the flat top yet,
+    // so overlays can cover the sand at the bottom without painting the wall.
+    private Vector3 SampleCliffVertexMasks(float worldX, float worldZ, float sampleStep)
+    {
+        if (cliffsEnabled == false || cliffStrength <= 0.0001f)
+            return Vector3.zero;
+
+        float region = SampleCliffRegion(worldX, worldZ);
+        if (region <= 0.0001f)
+            return Vector3.zero;
+
+        float plateau = SampleCliffPlateau(worldX, worldZ);
+        float distance = Mathf.Max(4f, sampleStep * 0.6f);
+
+        float gradientX = SampleCliffPlateau(worldX + distance, worldZ)
+            - SampleCliffPlateau(worldX - distance, worldZ);
+        float gradientZ = SampleCliffPlateau(worldX, worldZ + distance)
+            - SampleCliffPlateau(worldX, worldZ - distance);
+        float gradient = Mathf.Sqrt(gradientX * gradientX + gradientZ * gradientZ)
+            / (2f * distance);
+
+        // A plateau edge spans roughly edgeWidth / maskFrequency metres. Use
+        // that to keep the foot band stable when either JSON value changes.
+        float referenceGradient = Mathf.Max(0.00001f, cliffMaskFrequency)
+            / Mathf.Max(0.002f, cliffEdgeWidth);
+        // Mathf.SmoothStep interpolates from 0 to 1 with a normalised t,
+        // unlike HLSL smoothstep(edge0, edge1, value).
+        float wallEdge = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(
+            referenceGradient * 0.08f,
+            referenceGradient * 0.55f,
+            gradient));
+        float lowerSide = 1f - Mathf.SmoothStep(0f, 1f,
+            Mathf.InverseLerp(0.06f, 0.48f, plateau));
+
+        return new Vector3(region * wallEdge * lowerSide, region, plateau);
+    }
+
     private float SampleTerrainHeight(float worldX, float worldZ)
     {
         // Get biome control value (0 to 1)
@@ -290,6 +329,7 @@ public class TerrainGenerator
 
         Vector3[] vertices = new Vector3[vertsPerSide * vertsPerSide];
         Vector2[] uvs = new Vector2[vertsPerSide * vertsPerSide];
+        Color[] colors = new Color[vertsPerSide * vertsPerSide];
         int[] triangles = new int[(vertsPerSide - 1) * (vertsPerSide - 1) * 6];
 
         float step = tileSize / (vertsPerSide - 1);
@@ -316,6 +356,14 @@ public class TerrainGenerator
                 uvs[vertexIndex] = new Vector2(
                     x / (float)(vertsPerSide - 1),
                     z / (float)(vertsPerSide - 1)
+                );
+
+                Vector3 cliffMasks = SampleCliffVertexMasks(worldX, worldZ, step);
+                colors[vertexIndex] = new Color(
+                    cliffMasks.x,
+                    cliffMasks.y,
+                    cliffMasks.z,
+                    1f
                 );
 
                 vertexIndex++;
@@ -345,6 +393,7 @@ public class TerrainGenerator
 
         mesh.vertices = vertices;
         mesh.uv = uvs;
+        mesh.colors = colors;
         mesh.triangles = triangles;
         mesh.RecalculateNormals();
         mesh.RecalculateBounds();

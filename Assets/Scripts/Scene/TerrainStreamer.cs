@@ -64,6 +64,31 @@ public class TerrainStreamer : MonoBehaviour
     public float detailAOStrength = 0.8f;
     public float detailFadeDistance = 350f;
 
+    [Header("Terrain Overlays")]
+    [Tooltip("Per-planet overlay layers from StarSystems.json. Max three slots.")]
+    public TerrainOverlay[] overlayConfig;
+    [Tooltip("Planet name, used to connect path overlays to PlanetPOIs.json.")]
+    public string planetName;
+    private const int MaxOverlaySlots = 3;
+    private const int MaxPathSegments = 8;
+
+    private class OverlayRuntime
+    {
+        public bool active;
+        public Texture2D albedo;
+        public Texture2D normal;
+        public Texture2D occlusion;
+        public Vector4 pA;
+        public Vector4 pB;
+        public Vector4 pC;
+        public Vector4 pD;
+        public Vector4 pE;
+        public readonly Vector4[] segments = new Vector4[MaxPathSegments];
+        public int segmentCount;
+    }
+
+    private readonly OverlayRuntime[] overlays = new OverlayRuntime[MaxOverlaySlots];
+    private bool overlaysReady;
 
     [Header("Ship")]
     [SerializeField] public Transform ship;
@@ -94,6 +119,7 @@ public class TerrainStreamer : MonoBehaviour
         ResolveMapSiblings(Resources.LoadAll<Texture2D>("objects/terrain/textures/"));
         cliffTextures = LoadCliffTextures("objects/terrain/cliffs/");
         LoadDetailTextures();
+        LoadOverlays();
 
         if (ship == null)
         {
@@ -196,8 +222,9 @@ public class TerrainStreamer : MonoBehaviour
         sharedOuterMaterial.SetFloat("_CliffStart", cliffSlopeStart);
         sharedOuterMaterial.SetFloat("_CliffSoftness", Mathf.Max(0.001f, cliffSlopeSoftness));
 
-        // Distant ring: no close-up detail sampling.
+        // Distant ring: no close-up detail or overlay sampling.
         sharedOuterMaterial.SetFloat("_DetailEnabled", 0f);
+        sharedOuterMaterial.SetFloat("_OverlayEnabled", 0f);
 
         Vector3 shipLocalPosition = tileParent.InverseTransformPoint(ship.position);
         currentShipTile = LocalPositionToTileCoordinate(shipLocalPosition);
@@ -345,6 +372,7 @@ public class TerrainStreamer : MonoBehaviour
         material.SetTexture("_GroundNormalMap", index < terrainNormalMaps.Length ? terrainNormalMaps[index] : null);
         material.SetTexture("_GroundOcclusionMap", index < terrainOcclusionMaps.Length ? terrainOcclusionMaps[index] : null);
         ApplyDetailMaps(material);
+        ApplyOverlayMaps(material);
     }
 
     private Material LoadBaseMaterial(string materialPath)
@@ -477,6 +505,233 @@ public class TerrainStreamer : MonoBehaviour
         }
 
         return map;
+    }
+
+    // Loads up to three overlay sets: <texture>_d / _n / _ao. Every layer is
+    // driven by a procedural mask, so no splatmap asset is required.
+    private void LoadOverlays()
+    {
+        overlaysReady = false;
+
+        for (int i = 0; i < overlays.Length; i++)
+            overlays[i] = null;
+
+        if (overlayConfig == null || overlayConfig.Length == 0)
+        {
+            ApplyOverlayMaps(terrainMaterial);
+            return;
+        }
+
+        int slot = 0;
+
+        foreach (TerrainOverlay config in overlayConfig)
+        {
+            if (slot >= MaxOverlaySlots || config == null || !config.enabled)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(config.texture))
+                continue;
+
+            string baseName = NormalizeOverlayBaseName(config.texture);
+            Texture2D albedo = Resources.Load<Texture2D>("objects/terrain/textures/" + baseName + "_d");
+
+            if (albedo == null)
+            {
+                Debug.LogWarning("TerrainTileStreamer: Overlay albedo not found for '"
+                    + config.texture + "' (expected " + baseName + "_d).");
+                continue;
+            }
+
+            OverlayRuntime runtime = new OverlayRuntime
+            {
+                active = true,
+                albedo = albedo,
+                normal = Resources.Load<Texture2D>("objects/terrain/textures/" + baseName + "_n"),
+                occlusion = Resources.Load<Texture2D>("objects/terrain/textures/" + baseName + "_ao")
+            };
+
+            int mode = OverlayModeToInt(config.mode);
+            bool connectPois = config.connectPois || mode == 3;
+
+            float tiling = config.tiling > 0f ? config.tiling : 0.05f;
+            float angle = config.angle * Mathf.Deg2Rad;
+
+            runtime.pA = new Vector4(
+                tiling,
+                Mathf.Clamp01(config.strength),
+                config.fadeDistance,
+                mode);
+
+            runtime.pB = new Vector4(
+                config.width > 0f ? config.width : 3f,
+                config.feather > 0f ? config.feather : 4f,
+                config.wanderAmplitude,
+                config.wanderFrequency);
+
+            runtime.pC = new Vector4(
+                config.noiseScale > 0f ? config.noiseScale : 0.002f,
+                Mathf.Clamp01(config.threshold),
+                config.patchFeather > 0f ? config.patchFeather : 0.12f,
+                config.seedOffset);
+
+            runtime.pD = new Vector4(
+                Mathf.Cos(angle),
+                Mathf.Sin(angle),
+                config.offset,
+                config.seedOffset * 0.173f);
+
+            runtime.pE = new Vector4(
+                Mathf.Clamp01(config.normalStrength),
+                Mathf.Clamp01(config.aoStrength),
+                0f,
+                0f);
+
+            if (connectPois)
+                LoadOverlayPoiSegments(runtime);
+
+            runtime.pE.z = runtime.segmentCount;
+            overlays[slot++] = runtime;
+        }
+
+        overlaysReady = true;
+
+        if (terrainMaterial != null)
+            ApplyOverlayMaps(terrainMaterial);
+    }
+
+    private static string NormalizeOverlayBaseName(string texture)
+    {
+        string baseName = texture.Trim();
+        string lower = baseName.ToLowerInvariant();
+        string[] suffixes = { "_disp", "_height", "_normal", "_occlusion", "_ao", "_d", "_n", "_h", "_r" };
+
+        foreach (string suffix in suffixes)
+        {
+            if (lower.EndsWith(suffix))
+            {
+                baseName = baseName.Substring(0, baseName.Length - suffix.Length);
+                break;
+            }
+        }
+
+        return baseName;
+    }
+
+    private static int OverlayModeToInt(string mode)
+    {
+        string lower = (mode ?? string.Empty).Trim().ToLowerInvariant();
+
+        switch (lower)
+        {
+            case "clifffoot":
+            case "cliff-foot":
+            case "cliff_foot":
+            case "footsand":
+                return 1;
+            case "path":
+            case "trail":
+            case "wanderingpath":
+                return 2;
+            case "poipath":
+            case "poi-path":
+            case "poi_path":
+            case "waypoints":
+                return 3;
+            default:
+                return 0;
+        }
+    }
+
+    private void LoadOverlayPoiSegments(OverlayRuntime runtime)
+    {
+        runtime.segmentCount = 0;
+
+        if (string.IsNullOrWhiteSpace(planetName))
+            return;
+
+        TextAsset asset = Resources.Load<TextAsset>(OGGetAddress.files + "PlanetPOIs");
+
+        if (asset == null)
+            return;
+
+        PlanetPOIs definitions = JsonUtility.FromJson<PlanetPOIs>(asset.text);
+
+        if (definitions == null || definitions.planetPOIsData == null)
+            return;
+
+        PlanetPOILocation location = null;
+
+        foreach (PlanetPOILocation candidate in definitions.planetPOIsData)
+        {
+            if (candidate != null && string.Equals(candidate.planet, planetName,
+                    System.StringComparison.OrdinalIgnoreCase))
+            {
+                location = candidate;
+                break;
+            }
+        }
+
+        if (location == null)
+            return;
+
+        List<Vector2> points = new List<Vector2>
+        {
+            new Vector2(location.entryX, location.entryZ)
+        };
+
+        if (location.pois != null)
+        {
+            foreach (PlanetPOIEntry poi in location.pois)
+            {
+                if (poi != null)
+                    points.Add(new Vector2(poi.x, poi.z));
+            }
+        }
+
+        for (int i = 0; i < points.Count - 1 && runtime.segmentCount < MaxPathSegments; i++)
+        {
+            Vector2 start = points[i];
+            Vector2 end = points[i + 1];
+            runtime.segments[runtime.segmentCount++] = new Vector4(
+                start.x, start.y, end.x, end.y);
+        }
+    }
+
+    private void ApplyOverlayMaps(Material material)
+    {
+        if (material == null)
+            return;
+
+        if (!overlaysReady)
+        {
+            material.SetFloat("_OverlayEnabled", 0f);
+            return;
+        }
+
+        material.SetFloat("_OverlayEnabled", 1f);
+
+        for (int i = 0; i < MaxOverlaySlots; i++)
+        {
+            string suffix = i.ToString();
+            OverlayRuntime runtime = overlays[i];
+
+            if (runtime == null || !runtime.active)
+            {
+                material.SetFloat("_Overlay" + suffix + "A.y", 0f);
+                material.SetFloat("_Overlay" + suffix + "E.z", 0f);
+                continue;
+            }
+
+            material.SetTexture("_Overlay" + suffix + "Map", runtime.albedo);
+            material.SetTexture("_Overlay" + suffix + "NormalMap", runtime.normal);
+            material.SetTexture("_Overlay" + suffix + "AOMap", runtime.occlusion);
+            material.SetVector("_Overlay" + suffix + "A", runtime.pA);
+            material.SetVector("_Overlay" + suffix + "B", runtime.pB);
+            material.SetVector("_Overlay" + suffix + "C", runtime.pC);
+            material.SetVector("_Overlay" + suffix + "D", runtime.pD);
+            material.SetVector("_Overlay" + suffix + "E", runtime.pE);
+            material.SetVectorArray("_Overlay" + suffix + "Segments", runtime.segments);
+        }
     }
 
     private void UpdateLoadedTiles()

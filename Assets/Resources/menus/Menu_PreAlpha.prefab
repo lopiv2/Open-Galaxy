@@ -836,7 +836,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 12
     m_FontStyle: 0
     m_BestFit: 0
@@ -1403,132 +1403,98 @@ MonoBehaviour:
     m_LineSpacing: 1
   m_Text: '05/08/26 - Version 11.6.80 Released
 
-    - added: info for how to set
-    up formation flying correctly in the editor
+    - added: info for how to set up formation flying correctly in the editor
 
-    - fixed: formation flying bug,
-    follow ship not chasing down lead ship
+    - fixed: formation flying bug, follow ship not chasing down lead ship
 
-    - fixed: can''t select choice using
-    controller d-pad
+    - fixed: can''t select choice using controller d-pad
 
-    - updated: don''t allow exit menu during cutscene or mission
-    briefing
+    - updated: don''t allow exit menu during cutscene or mission briefing
 
 
     05/08/26 - Version 11.6.67 Released
 
-    - added: make save string
-    and if string equals node
+    - added: make save string and if string equals node
 
     - added: choice node option
 
-    - added: make
-    input functions independent of smallship script
+    - added: make input functions independent of smallship script
 
-    - added: warning sound to
-    player cockpit when ship is badly damaged
+    - added: warning sound to player cockpit when ship is badly damaged
 
-    - added: load lots of containers
-    without slowing down game
+    - added: load lots of containers without slowing down game
 
     - added: new vong ships
 
-    - added: hud functions
-    for choice node
+    - added: hud functions for choice node
 
     - added: create ifchoicehasbeenmade node
 
-    - added: finish
-    putting textures on vong ships
+    - added: finish putting textures on vong ships
 
-    - added: create ship information for vong
-    ships
+    - added: create ship information for vong ships
 
-    - updated: set controller senstivity in input settings when loading
-    game
+    - updated: set controller senstivity in input settings when loading game
 
     - updated: set keyboard and mouse in input settings
 
-    - updated:
-    remove all OGinput references free from going through the smallship script
+    - updated: remove all OGinput references free from going through the smallship script
 
-    -
-    updated: make grabbing the reference to OGInput the first thing that the smallship
-    does then
+    - updated: make grabbing the reference to OGInput the first thing that the smallship does then
 
-    - added: optional ''fadeout/fadein'' for hyperspace to imply the
-    passing of time
+    - added: optional ''fadeout/fadein'' for hyperspace to imply the passing of time
 
     - updated: set up vong ships
 
-    - updated: smoothing on
-    mouse input
+    - updated: smoothing on mouse input
 
     - updated: make pitch on ships signifcantly stronger than turn
 
-    -
-    removed: rotation options from loadsingleshipfromhangar node
+    - removed: rotation options from loadsingleshipfromhangar node
 
-    - fixed: loadsingleshipfromhangar
-    error
+    - fixed: loadsingleshipfromhangar error
 
-    - fixed: loadsingleshipfromhangar confusing type and launchship in
-    mission functions
+    - fixed: loadsingleshipfromhangar confusing type and launchship in mission functions
 
     - fixed: docking node null bug
 
-    - fixed: null bug
-    when destroying a ship exiting docking
+    - fixed: null bug when destroying a ship exiting docking
 
-    - updated: select closest hostile
-    ship should not select docked ships
+    - updated: select closest hostile ship should not select docked ships
 
     - removed: howintheworld from credits
 
-    -
-    removed: skybox credits
+    - removed: skybox credits
 
-    - updated: reduce resistance to impacts with largeships
-    and asteroids
+    - updated: reduce resistance to impacts with largeships and asteroids
 
     - restored: yorik_miid to availible vong ships
 
-    - updated:
-    system level controls locked in new OGinput system
+    - updated: system level controls locked in new OGinput system
 
-    - updated: strident_carrier
-    in editor doesn''t load
+    - updated: strident_carrier in editor doesn''t load
 
-    - updated: in editor make internal file false by
-    default
+    - updated: in editor make internal file false by default
 
     - updated: sith interceptor is wrongly listed as imperial
 
-    -
-    updated: acclamator_m3 is wrongly listed as imperial
+    - updated: acclamator_m3 is wrongly listed as imperial
 
-    - updated: refinery_ship
-    does not load in ship inspector
+    - updated: refinery_ship does not load in ship inspector
 
-    - updated: sticks not working when controller
-    is switched
+    - updated: sticks not working when controller is switched
 
     - updated: collision problem on frigate
 
-    - updated: auto-aim
-    window should be smaller
+    - updated: auto-aim window should be smaller
 
-    - updated: chasemaster_frigate should be listed
-    as a sith ship
+    - updated: chasemaster_frigate should be listed as a sith ship
 
     - updated: middle mouse button for laser on hud not right
 
-    -
-    updated: auto-aim should not run when targetting largeship
+    - updated: auto-aim should not run when targetting largeship
 
-    - updated: auto-aim
-    should be on by default'
+    - updated: auto-aim should be on by default'
 --- !u!1 &1130548487234280425
 GameObject:
   m_ObjectHideFlags: 0
@@ -2269,6 +2235,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -3322,7 +3289,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 12
     m_FontStyle: 0
     m_BestFit: 0
@@ -3598,7 +3565,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 12
     m_FontStyle: 0
     m_BestFit: 0
@@ -3900,7 +3867,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 12
     m_FontStyle: 0
     m_BestFit: 0
@@ -4150,6 +4117,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -4539,6 +4507,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -4663,6 +4632,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -6429,6 +6399,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -7145,7 +7116,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 12
     m_FontStyle: 0
     m_BestFit: 0
@@ -8572,7 +8543,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 12
     m_FontStyle: 0
     m_BestFit: 0
@@ -9131,6 +9102,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0

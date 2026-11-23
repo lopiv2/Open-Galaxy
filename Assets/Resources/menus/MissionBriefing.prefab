@@ -459,7 +459,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 12
     m_FontStyle: 0
     m_BestFit: 0
@@ -615,7 +615,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 14
     m_FontStyle: 0
     m_BestFit: 0
@@ -889,6 +889,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
+  m_UseReflectionProbes: 0
   m_AdditionalShaderChannelsFlag: 0
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
@@ -960,6 +961,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   missionBriefingAudio: {fileID: 0}
   environment: {fileID: 0}
+  isActive: 0
   colour: '#FFFFFF'
   sunIsEnabled: 1
   sunIntensity: 1

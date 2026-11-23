@@ -66,7 +66,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 10
     m_FontStyle: 0
     m_BestFit: 0
@@ -172,6 +172,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   buttonName: {fileID: 4797924826510504301}
   description: {fileID: 8865085919845240837}
+  informationRight: {fileID: 0}
   buttonShiftDown: 90
   buttonShiftRight: 0
   noSound: 1
@@ -287,7 +288,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls: []
   m_FontData:
-    m_Font: {fileID: 12800000, guid: c483c514f8cb77f4b96ce901918a84eb, type: 3}
+    m_Font: {fileID: 12800000, guid: 0aea998216d7f2c4c99ca9bf7d1bdb29, type: 3}
     m_FontSize: 14
     m_FontStyle: 0
     m_BestFit: 0

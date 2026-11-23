@@ -54,12 +54,20 @@ public class CliffSettings
     public float canyonDepth;
     public float canyonWidth;
     public float strength;
+    // Fraction of the planet covered by cliff regions (deterministic zones).
     public float coverage;
+    public float regionFrequency;
+    public float regionFeather;
     public float maskThreshold;
     public float maskFrequency;
     public float slopeStart;
     public float slopeSoftness;
     public string textureType;
+    // Mesh resolution. The distant ring needs enough vertices to keep the
+    // mesa walls visible while flying; 8 per side flattens them completely.
+    public int verticesPerSide;
+    public int outerVerticesPerSide;
+    public float highDetailRadiusKm;
 }
 
 [System.Serializable]

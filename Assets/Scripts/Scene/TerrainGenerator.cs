@@ -20,6 +20,7 @@ public class TerrainGenerator
     private readonly FastNoiseLite biomeNoise;
     private readonly FastNoiseLite cliffMaskNoise;
     private readonly FastNoiseLite cliffCanyonNoise;
+    private readonly FastNoiseLite cliffRegionNoise;
 
     // Amplitude multipliers for each biome - these need to be MUCH larger
     public float plainsAmp = 50f;
@@ -36,12 +37,18 @@ public class TerrainGenerator
     public float cliffCanyonDepth = 55f;
     public float cliffCanyonWidth = 0.06f;
     public float cliffStrength = 1f;
-    // 0..1: how much of the planet gets mesas/canyons. 1 = everywhere.
+    // 0..1: fraction of the planet covered by cliff regions. The regions are
+    // picked by a low-frequency noise seeded from the planet seed, so the
+    // same seed always produces the same cliff/dune zones anywhere in the
+    // world. 0 = none, 1 = everywhere.
     public float cliffCoverage = 1f;
+    public float cliffRegionFrequency = 0.00012f;
+    public float cliffRegionFeather = 0.06f;
     public float cliffMaskThreshold = 0.45f;
     public float cliffMaskFrequency = 0.00045f;
 
     private float appliedMaskFrequency = -1f;
+    private float appliedRegionFrequency = -1f;
 
     // Biome percentages
     private float plainsPercentage = 0.25f;
@@ -71,6 +78,7 @@ public class TerrainGenerator
         biomeNoise = new FastNoiseLite(seed + 4);
         cliffMaskNoise = new FastNoiseLite(seed + 5);
         cliffCanyonNoise = new FastNoiseLite(seed + 6);
+        cliffRegionNoise = new FastNoiseLite(seed + 7);
 
         InitializeNoiseGenerators();
     }
@@ -129,6 +137,44 @@ public class TerrainGenerator
         cliffCanyonNoise.SetFractalOctaves(4);
         cliffCanyonNoise.SetFractalLacunarity(2.1f);
         cliffCanyonNoise.SetFractalGain(0.55f);
+
+        // Cliff regions: very low frequency noise decides which parts of the
+        // planet have mesas/canyons at all. Derived from the planet seed, so
+        // travelling in any direction always sees the same zones.
+        cliffRegionNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+        cliffRegionNoise.SetFrequency(cliffRegionFrequency);
+        cliffRegionNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
+        cliffRegionNoise.SetFractalOctaves(2);
+        cliffRegionNoise.SetFractalLacunarity(2f);
+        cliffRegionNoise.SetFractalGain(0.5f);
+    }
+
+    // Large deterministic zones where cliffs are allowed. Coverage is a
+    // threshold on this field: 0.5 means roughly half the planet is cliff
+    // country and half is open dunes, with soft transitions between them.
+    private float SampleCliffRegion(float worldX, float worldZ)
+    {
+        float coverage = Mathf.Clamp01(cliffCoverage);
+
+        if (coverage <= 0.0001f)
+            return 0f;
+        if (coverage >= 0.9999f)
+            return 1f;
+
+        float frequency = Mathf.Max(0.000001f, cliffRegionFrequency);
+
+        if (Mathf.Approximately(frequency, appliedRegionFrequency) == false)
+        {
+            cliffRegionNoise.SetFrequency(frequency);
+            appliedRegionFrequency = frequency;
+        }
+
+        float field = (cliffRegionNoise.GetNoise(worldX, worldZ) + 1f) * 0.5f;
+        float threshold = 1f - coverage;
+        float feather = Mathf.Max(0.001f, cliffRegionFeather);
+
+        return Mathf.SmoothStep(0f, 1f,
+            Mathf.InverseLerp(threshold, threshold + feather, field));
     }
 
     // Sharp plateau mask: raising the ground where this is 1 carves a
@@ -143,10 +189,7 @@ public class TerrainGenerator
             appliedMaskFrequency = frequency;
         }
 
-        // Coverage 0 pushes the threshold above the noise range (no mesas),
-        // coverage 1 uses the configured threshold everywhere on the planet.
-        float coverage = Mathf.Clamp01(cliffCoverage);
-        float threshold = Mathf.Lerp(1f, Mathf.Clamp(cliffMaskThreshold, 0f, 0.98f), coverage);
+        float threshold = Mathf.Clamp(cliffMaskThreshold, 0f, 0.98f);
         float field = (cliffMaskNoise.GetNoise(worldX, worldZ) + 1f) * 0.5f;
         float edge = Mathf.Clamp(cliffEdgeWidth, 0.002f, 0.25f);
 
@@ -161,10 +204,17 @@ public class TerrainGenerator
         if (cliffsEnabled == false)
             return height;
 
-        float coverage = Mathf.Clamp01(cliffCoverage);
         float strength = Mathf.Clamp01(cliffStrength);
 
-        if (coverage <= 0.0001f || strength <= 0.0001f)
+        if (strength <= 0.0001f)
+            return height;
+
+        // Region mask comes first: outside cliff country the terrain is
+        // exactly the original biome height, so travelling shows clear
+        // stretches of dunes between mesa fields.
+        float region = SampleCliffRegion(worldX, worldZ);
+
+        if (region <= 0.0001f)
             return height;
 
         float plateau = SampleCliffPlateau(worldX, worldZ);
@@ -177,13 +227,13 @@ public class TerrainGenerator
         float ridge = cliffCanyonNoise.GetNoise(worldX, worldZ);
         float canyonWidth = Mathf.Clamp(cliffCanyonWidth, 0.002f, 0.5f);
         float canyon = Mathf.SmoothStep(0f, 1f,
-            Mathf.InverseLerp(0.35f, 0.35f + canyonWidth, ridge)) * coverage;
+            Mathf.InverseLerp(0.35f, 0.35f + canyonWidth, ridge));
 
         float carved = height
             + plateau * mesaTop
             - canyon * Mathf.Max(0f, cliffCanyonDepth);
 
-        return Mathf.Lerp(height, carved, strength);
+        return Mathf.Lerp(height, carved, strength * region);
     }
 
     private float SampleTerrainHeight(float worldX, float worldZ)

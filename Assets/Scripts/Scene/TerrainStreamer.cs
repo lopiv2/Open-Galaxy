@@ -47,8 +47,10 @@ public class TerrainStreamer : MonoBehaviour
     public float cliffCanyonDepth = 55f;
     public float cliffCanyonWidth = 0.06f;
     public float cliffStrength = 1f;
-    [Tooltip("0..1: portion of the terrain with mesas/canyons. 1 = whole planet.")]
+    [Tooltip("0..1: fraction of the planet covered by deterministic cliff regions.")]
     public float cliffCoverage = 1f;
+    public float cliffRegionFrequency = 0.00012f;
+    public float cliffRegionFeather = 0.06f;
     public float cliffMaskThreshold = 0.45f;
     public float cliffMaskFrequency = 0.00045f;
 
@@ -158,6 +160,8 @@ public class TerrainStreamer : MonoBehaviour
         terrainGenerator.cliffCanyonWidth = cliffCanyonWidth;
         terrainGenerator.cliffStrength = cliffStrength;
         terrainGenerator.cliffCoverage = cliffCoverage;
+        terrainGenerator.cliffRegionFrequency = cliffRegionFrequency;
+        terrainGenerator.cliffRegionFeather = cliffRegionFeather;
         terrainGenerator.cliffMaskThreshold = cliffMaskThreshold;
         terrainGenerator.cliffMaskFrequency = cliffMaskFrequency;
 

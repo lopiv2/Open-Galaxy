@@ -29203,11 +29203,16 @@
                 "canyonWidth": 0.06,
                 "strength": 1.0,
                 "coverage": 0.5,
+                "regionFrequency": 0.00012,
+                "regionFeather": 0.06,
                 "maskThreshold": 0.45,
                 "maskFrequency": 0.00045,
                 "slopeStart": 0.72,
                 "slopeSoftness": 0.15,
-                "textureType": "cliff"
+                "textureType": "cliff",
+                "verticesPerSide": 48,
+                "outerVerticesPerSide": 32,
+                "highDetailRadiusKm": 5
             },
             "cloudCoverage": 0.32,
             "cloudOpacity": 0.34,

@@ -468,9 +468,15 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
         if (cliffs != null && cliffs.enabled)
         {
-            // Higher vertex resolution keeps the risers steep enough to read
-            // as cliffs instead of ramps.
-            streamer.verticesPerSide = 48;
+            // Mesh resolution: close tiles keep the risers steep, and the
+            // distant ring needs enough vertices or mesas smooth out into
+            // ramps as soon as the ship leaves the landing area.
+            streamer.verticesPerSide = cliffs.verticesPerSide > 0
+                ? cliffs.verticesPerSide : 48;
+            streamer.outerVerticesPerSide = cliffs.outerVerticesPerSide > 0
+                ? cliffs.outerVerticesPerSide : 32;
+            streamer.tileRadiusInKilometres = cliffs.highDetailRadiusKm > 0f
+                ? cliffs.highDetailRadiusKm : 5f;
             streamer.cliffsEnabled = true;
             streamer.cliffMesaHeight = cliffs.mesaHeight > 0f ? cliffs.mesaHeight : 60f;
             streamer.cliffMesaRoughness = cliffs.mesaRoughness > 0f ? cliffs.mesaRoughness : 25f;
@@ -479,6 +485,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
             streamer.cliffCanyonWidth = cliffs.canyonWidth > 0f ? cliffs.canyonWidth : 0.06f;
             streamer.cliffStrength = cliffs.strength > 0f ? cliffs.strength : 1f;
             streamer.cliffCoverage = cliffs.coverage > 0f ? cliffs.coverage : 1f;
+            streamer.cliffRegionFrequency = cliffs.regionFrequency > 0f
+                ? cliffs.regionFrequency : 0.00012f;
+            streamer.cliffRegionFeather = cliffs.regionFeather > 0f
+                ? cliffs.regionFeather : 0.06f;
             streamer.cliffMaskThreshold = cliffs.maskThreshold > 0f ? cliffs.maskThreshold : 0.45f;
             streamer.cliffMaskFrequency = cliffs.maskFrequency > 0f ? cliffs.maskFrequency : 0.00045f;
             streamer.cliffSlopeStart = cliffs.slopeStart > 0f ? cliffs.slopeStart : 0.72f;

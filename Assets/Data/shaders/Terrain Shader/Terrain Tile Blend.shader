@@ -5,12 +5,26 @@
         [Header(Current Tile)]
         _GroundMap ("Ground", 2D) = "white" {}
         _CliffMap ("Shared Cliff", 2D) = "gray" {}
+        _CliffMapB ("Shared Cliff B", 2D) = "gray" {}
 
         [Header(Surface Detail)]
         _GroundNormalMap ("Ground Normal", 2D) = "bump" {}
         _GroundOcclusionMap ("Ground Occlusion", 2D) = "white" {}
         _OcclusionStrength ("Occlusion Strength", Range(0, 1)) = 1
         _BumpScale ("Normal Strength", Range(0, 2)) = 1
+
+        [Header(Closeup Detail)]
+        _DetailMap ("Detail Albedo", 2D) = "white" {}
+        _DetailNormalMap ("Detail Normal", 2D) = "bump" {}
+        _DetailHeightMap ("Detail Height", 2D) = "black" {}
+        _DetailOcclusionMap ("Detail AO", 2D) = "white" {}
+        _DetailEnabled ("Detail Enabled", Float) = 0
+        _DetailTiling ("Detail Tiling", Float) = 0.05
+        _DetailStrength ("Detail Strength", Range(0, 1)) = 0.6
+        _DetailNormalStrength ("Detail Normal Strength", Range(0, 2)) = 0.8
+        _DetailHeightScale ("Detail Height Scale", Range(0, 0.2)) = 0.015
+        _DetailAOStrength ("Detail AO Strength", Range(0, 1)) = 0.8
+        _DetailFadeDistance ("Detail Fade Distance", Float) = 350
 
         [Header(Neighbor Ground Textures)]
         _RightGroundMap ("Right Ground", 2D) = "white" {}
@@ -24,6 +38,7 @@
         [Header(Cliff)]
         _CliffStart ("Cliff Slope Start", Range(0, 1)) = 0.65
         _CliffSoftness ("Cliff Slope Softness", Range(0.001, 1)) = 0.2
+        _CliffBlendAmount ("Cliff Map Blend", Range(0, 1)) = 0
 
         [Header(Texture Settings)]
         _TextureTiling ("Texture Tiling", Float) = 1
@@ -68,6 +83,9 @@
             TEXTURE2D(_CliffMap);
             SAMPLER(sampler_CliffMap);
 
+            TEXTURE2D(_CliffMapB);
+            SAMPLER(sampler_CliffMapB);
+
             TEXTURE2D(_RightGroundMap);
             SAMPLER(sampler_RightGroundMap);
 
@@ -80,6 +98,18 @@
             TEXTURE2D(_GroundOcclusionMap);
             SAMPLER(sampler_GroundOcclusionMap);
 
+            TEXTURE2D(_DetailMap);
+            SAMPLER(sampler_DetailMap);
+
+            TEXTURE2D(_DetailNormalMap);
+            SAMPLER(sampler_DetailNormalMap);
+
+            TEXTURE2D(_DetailHeightMap);
+            SAMPLER(sampler_DetailHeightMap);
+
+            TEXTURE2D(_DetailOcclusionMap);
+            SAMPLER(sampler_DetailOcclusionMap);
+
             CBUFFER_START(UnityPerMaterial)
 
                 half _BorderBlend;
@@ -89,6 +119,7 @@
 
                 half _CliffStart;
                 half _CliffSoftness;
+                half _CliffBlendAmount;
 
                 half _TextureTiling;
                 half _Brightness;
@@ -96,6 +127,13 @@
                 half _OcclusionStrength;
                 half _BumpScale;
 
+                half _DetailEnabled;
+                half _DetailTiling;
+                half _DetailStrength;
+                half _DetailNormalStrength;
+                half _DetailHeightScale;
+                half _DetailAOStrength;
+                half _DetailFadeDistance;
 
             CBUFFER_END
 
@@ -158,6 +196,15 @@
                 return SAMPLE_TEXTURE2D(
                     _CliffMap,
                     sampler_CliffMap,
+                    uv
+                ).rgb;
+            }
+
+            half3 SampleSharedCliffB(float2 uv)
+            {
+                return SAMPLE_TEXTURE2D(
+                    _CliffMapB,
+                    sampler_CliffMapB,
                     uv
                 ).rgb;
             }
@@ -320,18 +367,51 @@
                 return lerp(1.0h, ao, _OcclusionStrength);
             }
 
+            // Close-up normal detail, blended over the (already perturbed)
+            // ground normal. TBN is rebuilt from derivatives so no tangent
+            // stream is needed on the generated mesh.
+            half3 ApplyDetailNormal(
+                half3 baseNormalWS,
+                float3 positionWS,
+                float2 detailUV)
+            {
+                half3 mapN = UnpackNormal(
+                    SAMPLE_TEXTURE2D(
+                        _DetailNormalMap,
+                        sampler_DetailNormalMap,
+                        detailUV
+                    )
+                );
+
+                half3 q0 = ddx(positionWS);
+                half3 q1 = ddy(positionWS);
+                half2 st0 = ddx(detailUV);
+                half2 st1 = ddy(detailUV);
+
+                half3 N = normalize(baseNormalWS);
+                half3 T = normalize(q0 * st1.y - q1 * st0.y);
+                half3 B = -normalize(cross(N, T));
+                half3x3 TBN = half3x3(T, B, N);
+
+                half3 detailNormal = normalize(mul(mapN, TBN));
+                return normalize(lerp(N, detailNormal,
+                    saturate(_DetailNormalStrength)));
+            }
+
             half4 Frag(Varyings input) : SV_Target
             {
-                half3 normalWS = PerturbGroundNormal(
+                half3 groundNormalWS = PerturbGroundNormal(
                     input.positionWS,
                     normalize(input.normalWS),
                     input.uv
                 );
 
                 // Horizontal surfaces have normal.y near 1.
-                // Vertical surfaces have normal.y near 0.
+                // Vertical surfaces have normal.y near 0. Cliff detection
+                // uses the ground normal only: detail bumps must not make
+                // flat dunes look like cliff walls.
                 half cliffAmount = saturate(
-                    (_CliffStart - normalWS.y) /
+                    (_CliffStart - groundNormalWS.y) /
                     _CliffSoftness
                 );
 
@@ -351,9 +431,84 @@
                 // Baked crevice shadowing from the AO map (ground only).
                 groundColor *= GroundOcclusion(input.uv);
 
-                // One shared cliff texture is used everywhere.
-                half3 cliffColor =
-                    SampleSharedCliff(input.uv);
+                // Close-up detail: world-space tiled maps, so walking over a
+                // tile never reveals UV stretching or per-tile repetition.
+                half detailAmount = saturate(
+                    _DetailEnabled
+                    * _DetailStrength
+                    * (1.0h - smoothstep(
+                        _DetailFadeDistance * 0.6,
+                        _DetailFadeDistance,
+                        distance(input.positionWS, _WorldSpaceCameraPos)))
+                );
+
+                float2 detailUV = input.positionWS.xz * _DetailTiling;
+
+                // Height map drives a mild parallax offset: close grains
+                // shift slightly against the more distant dune surface.
+                half detailHeight = SAMPLE_TEXTURE2D(
+                    _DetailHeightMap,
+                    sampler_DetailHeightMap,
+                    detailUV
+                ).r;
+
+                float3 viewDirWS = normalize(
+                    _WorldSpaceCameraPos - input.positionWS
+                );
+
+                float2 parallax = viewDirWS.xz
+                    / max(0.35, abs(viewDirWS.y))
+                    * (detailHeight - 0.5)
+                    * _DetailHeightScale
+                    * 5.0;
+
+                float2 detailUVFinal = detailUV + parallax;
+
+                half3 detailAlbedo = SAMPLE_TEXTURE2D(
+                    _DetailMap,
+                    sampler_DetailMap,
+                    detailUVFinal
+                ).rgb;
+
+                half detailAO = SAMPLE_TEXTURE2D(
+                    _DetailOcclusionMap,
+                    sampler_DetailOcclusionMap,
+                    detailUVFinal
+                ).g;
+
+                half3 detailedGround = groundColor
+                    * saturate(detailAlbedo * 2.0h);
+
+                detailedGround *= lerp(1.0h, detailAO,
+                    _DetailAOStrength);
+
+                groundColor = lerp(groundColor, detailedGround,
+                    detailAmount);
+
+                half3 litNormal = ApplyDetailNormal(
+                    groundNormalWS,
+                    input.positionWS,
+                    detailUVFinal
+                );
+
+                litNormal = normalize(lerp(groundNormalWS, litNormal,
+                    detailAmount));
+
+                // Cliff maps: two textures blended with world-space noise so
+                // walls do not switch abruptly at tile borders.
+                half cliffPatch = smoothstep(
+                    0.35,
+                    0.65,
+                    ValueNoise(input.positionWS.xz * 0.0012)
+                );
+
+                half cliffBlend = cliffPatch * _CliffBlendAmount;
+
+                half3 cliffColor = lerp(
+                    SampleSharedCliff(input.uv),
+                    SampleSharedCliffB(input.uv),
+                    cliffBlend
+                );
 
                 half3 color = lerp(
                     groundColor,
@@ -364,7 +519,7 @@
                 Light mainLight = GetMainLight();
 
                 half diffuse = saturate(
-                    dot(normalWS, mainLight.direction)
+                    dot(litNormal, mainLight.direction)
                 );
 
                 half lighting = 0.35 + diffuse * 0.65;

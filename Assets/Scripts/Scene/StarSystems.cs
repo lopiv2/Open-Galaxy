@@ -21,6 +21,12 @@ public class StarSystem
     // Comma-separated, matched against texture names in
     // Resources/objects/terrain/textures. Empty = inherit from PlanetTypes.
     public string terrainTexture;
+    // Optional per-planet cliff/mesa terrain settings (StarSystems.json).
+    // Missing block = no cliffs, exactly like before.
+    public CliffSettings cliffs;
+    // Optional base name of the close-up detail texture set. The four maps
+    // are expected as <name>_d / _n / _h / _ao in the terrain textures folder.
+    public string detailTexture;
     // Optional per-planet cloud roof override (StarSystems.json). Zero/empty
     // means "use the PlanetTypes.json climate defaults for planetType".
     public float cloudCoverage;
@@ -34,6 +40,26 @@ public class StarSystem
     public float planetDistance;
     public List<StarSystemSun> suns;
     public List<HyperrouteStop> hyperrouteStops;
+}
+
+// Per-planet cliff generation, read from the "cliffs" block of a system in
+// StarSystems.json. Zero/empty values fall back to the defaults below.
+[System.Serializable]
+public class CliffSettings
+{
+    public bool enabled;
+    public float mesaHeight;
+    public float mesaRoughness;
+    public float edgeWidth;
+    public float canyonDepth;
+    public float canyonWidth;
+    public float strength;
+    public float coverage;
+    public float maskThreshold;
+    public float maskFrequency;
+    public float slopeStart;
+    public float slopeSoftness;
+    public string textureType;
 }
 
 [System.Serializable]

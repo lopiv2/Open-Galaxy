@@ -18,12 +18,30 @@ public class TerrainGenerator
     private readonly FastNoiseLite desertNoise;
     private readonly FastNoiseLite plainsNoise;
     private readonly FastNoiseLite biomeNoise;
+    private readonly FastNoiseLite cliffMaskNoise;
+    private readonly FastNoiseLite cliffCanyonNoise;
 
     // Amplitude multipliers for each biome - these need to be MUCH larger
     public float plainsAmp = 50f;
     public float desertAmp = 100f;
     public float hillsAmp = 200f;
     public float mountAmp = 400f;
+
+    // Cliff / mesa layer. Disabled by default so existing planets keep the
+    // exact same terrain. Everything is world-space, so tiles stay seamless.
+    public bool cliffsEnabled = false;
+    public float cliffMesaHeight = 60f;
+    public float cliffMesaRoughness = 25f;
+    public float cliffEdgeWidth = 0.02f;
+    public float cliffCanyonDepth = 55f;
+    public float cliffCanyonWidth = 0.06f;
+    public float cliffStrength = 1f;
+    // 0..1: how much of the planet gets mesas/canyons. 1 = everywhere.
+    public float cliffCoverage = 1f;
+    public float cliffMaskThreshold = 0.45f;
+    public float cliffMaskFrequency = 0.00045f;
+
+    private float appliedMaskFrequency = -1f;
 
     // Biome percentages
     private float plainsPercentage = 0.25f;
@@ -51,6 +69,8 @@ public class TerrainGenerator
         desertNoise = new FastNoiseLite(seed + 2);
         plainsNoise = new FastNoiseLite(seed + 3);
         biomeNoise = new FastNoiseLite(seed + 4);
+        cliffMaskNoise = new FastNoiseLite(seed + 5);
+        cliffCanyonNoise = new FastNoiseLite(seed + 6);
 
         InitializeNoiseGenerators();
     }
@@ -92,6 +112,78 @@ public class TerrainGenerator
         biomeNoise.SetFractalOctaves(2);
         biomeNoise.SetFractalLacunarity(2.0f);
         biomeNoise.SetFractalGain(0.5f);
+
+        // Cliff mask: low-frequency patches that decide where mesas appear.
+        // Frequency is configurable per planet; applied on first sample.
+        cliffMaskNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+        cliffMaskNoise.SetFrequency(cliffMaskFrequency);
+        cliffMaskNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
+        cliffMaskNoise.SetFractalOctaves(3);
+        cliffMaskNoise.SetFractalLacunarity(2.0f);
+        cliffMaskNoise.SetFractalGain(0.5f);
+
+        // Canyon carve: ridged noise digs a network of gorges between mesas.
+        cliffCanyonNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+        cliffCanyonNoise.SetFrequency(0.0012f);
+        cliffCanyonNoise.SetFractalType(FastNoiseLite.FractalType.Ridged);
+        cliffCanyonNoise.SetFractalOctaves(4);
+        cliffCanyonNoise.SetFractalLacunarity(2.1f);
+        cliffCanyonNoise.SetFractalGain(0.55f);
+    }
+
+    // Sharp plateau mask: raising the ground where this is 1 carves a
+    // near-vertical mesa wall regardless of the base terrain slope.
+    private float SampleCliffPlateau(float worldX, float worldZ)
+    {
+        float frequency = Mathf.Max(0.00001f, cliffMaskFrequency);
+
+        if (Mathf.Approximately(frequency, appliedMaskFrequency) == false)
+        {
+            cliffMaskNoise.SetFrequency(frequency);
+            appliedMaskFrequency = frequency;
+        }
+
+        // Coverage 0 pushes the threshold above the noise range (no mesas),
+        // coverage 1 uses the configured threshold everywhere on the planet.
+        float coverage = Mathf.Clamp01(cliffCoverage);
+        float threshold = Mathf.Lerp(1f, Mathf.Clamp(cliffMaskThreshold, 0f, 0.98f), coverage);
+        float field = (cliffMaskNoise.GetNoise(worldX, worldZ) + 1f) * 0.5f;
+        float edge = Mathf.Clamp(cliffEdgeWidth, 0.002f, 0.25f);
+
+        return Mathf.SmoothStep(0f, 1f,
+            Mathf.InverseLerp(threshold, threshold + edge, field));
+    }
+
+    // Raises mesas and cuts canyon gorges. Works on top of the base biome
+    // height; coverage/strength come from the per-planet JSON settings.
+    private float ApplyCliffs(float height, float worldX, float worldZ)
+    {
+        if (cliffsEnabled == false)
+            return height;
+
+        float coverage = Mathf.Clamp01(cliffCoverage);
+        float strength = Mathf.Clamp01(cliffStrength);
+
+        if (coverage <= 0.0001f || strength <= 0.0001f)
+            return height;
+
+        float plateau = SampleCliffPlateau(worldX, worldZ);
+
+        // Rough top so mesas are not perfectly flat cardboard.
+        float topNoise = (hillNoise.GetNoise(worldX * tileNoiseScale, worldZ * tileNoiseScale) + 1f) * 0.5f;
+        float mesaTop = Mathf.Max(0f, cliffMesaHeight) + topNoise * Mathf.Max(0f, cliffMesaRoughness);
+
+        // Ridged lines become canyon gorges cut through the mesas.
+        float ridge = cliffCanyonNoise.GetNoise(worldX, worldZ);
+        float canyonWidth = Mathf.Clamp(cliffCanyonWidth, 0.002f, 0.5f);
+        float canyon = Mathf.SmoothStep(0f, 1f,
+            Mathf.InverseLerp(0.35f, 0.35f + canyonWidth, ridge)) * coverage;
+
+        float carved = height
+            + plateau * mesaTop
+            - canyon * Mathf.Max(0f, cliffCanyonDepth);
+
+        return Mathf.Lerp(height, carved, strength);
     }
 
     private float SampleTerrainHeight(float worldX, float worldZ)
@@ -132,7 +224,7 @@ public class TerrainGenerator
             height = Mathf.Lerp(hHills, hMount, blendFactor);
         }
 
-        return height;
+        return ApplyCliffs(height, worldX, worldZ);
     }
 
     public Mesh GenerateMesh(Vector2Int tileCoordinate)

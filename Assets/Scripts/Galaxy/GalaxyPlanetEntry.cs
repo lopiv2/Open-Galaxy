@@ -459,6 +459,37 @@ public class GalaxyPlanetEntry : MonoBehaviour
         streamer.desertAmp = 90f;
         streamer.hillsAmp = 120f;
         streamer.mountAmp = 220f;
+
+        // Cliffs / mesas / canyons are configured per planet in
+        // StarSystems.json ("cliffs" block). Planets without that block keep
+        // exactly the original terrain.
+        StarSystem system = GetStarSystem(scene.currentLocation);
+        CliffSettings cliffs = system != null ? system.cliffs : null;
+
+        if (cliffs != null && cliffs.enabled)
+        {
+            // Higher vertex resolution keeps the risers steep enough to read
+            // as cliffs instead of ramps.
+            streamer.verticesPerSide = 48;
+            streamer.cliffsEnabled = true;
+            streamer.cliffMesaHeight = cliffs.mesaHeight > 0f ? cliffs.mesaHeight : 60f;
+            streamer.cliffMesaRoughness = cliffs.mesaRoughness > 0f ? cliffs.mesaRoughness : 25f;
+            streamer.cliffEdgeWidth = cliffs.edgeWidth > 0f ? cliffs.edgeWidth : 0.02f;
+            streamer.cliffCanyonDepth = cliffs.canyonDepth > 0f ? cliffs.canyonDepth : 55f;
+            streamer.cliffCanyonWidth = cliffs.canyonWidth > 0f ? cliffs.canyonWidth : 0.06f;
+            streamer.cliffStrength = cliffs.strength > 0f ? cliffs.strength : 1f;
+            streamer.cliffCoverage = cliffs.coverage > 0f ? cliffs.coverage : 1f;
+            streamer.cliffMaskThreshold = cliffs.maskThreshold > 0f ? cliffs.maskThreshold : 0.45f;
+            streamer.cliffMaskFrequency = cliffs.maskFrequency > 0f ? cliffs.maskFrequency : 0.00045f;
+            streamer.cliffSlopeStart = cliffs.slopeStart > 0f ? cliffs.slopeStart : 0.72f;
+            streamer.cliffSlopeSoftness = cliffs.slopeSoftness > 0f ? cliffs.slopeSoftness : 0.15f;
+            streamer.cliffTextureType = string.IsNullOrEmpty(cliffs.textureType)
+                ? "cliff" : cliffs.textureType;
+        }
+
+        // Optional close-up detail set (<name>_d/_n/_h/_ao) from JSON.
+        streamer.detailTextureType = system != null
+            ? system.detailTexture : null;
     }
 
     private void UpdateOnPlanet()

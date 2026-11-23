@@ -70,7 +70,7 @@ public class TerrainStreamer : MonoBehaviour
     [Tooltip("Planet name, used to connect path overlays to PlanetPOIs.json.")]
     public string planetName;
     private const int MaxOverlaySlots = 3;
-    private const int MaxPathSegments = 8;
+    private const int MaxPathSegments = 16;
 
     private class OverlayRuntime
     {
@@ -119,7 +119,6 @@ public class TerrainStreamer : MonoBehaviour
         ResolveMapSiblings(Resources.LoadAll<Texture2D>("objects/terrain/textures/"));
         cliffTextures = LoadCliffTextures("objects/terrain/cliffs/");
         LoadDetailTextures();
-        LoadOverlays();
 
         if (ship == null)
         {
@@ -190,6 +189,10 @@ public class TerrainStreamer : MonoBehaviour
         terrainGenerator.cliffRegionFeather = cliffRegionFeather;
         terrainGenerator.cliffMaskThreshold = cliffMaskThreshold;
         terrainGenerator.cliffMaskFrequency = cliffMaskFrequency;
+
+        // Route overlays need the configured terrain generator, so they are
+        // loaded only after its cliff fields are ready.
+        LoadOverlays();
 
         tileRadiusInTiles = Mathf.CeilToInt(
             tileRadiusInKilometres * 1000f / tileSize
@@ -589,6 +592,8 @@ public class TerrainStreamer : MonoBehaviour
 
             if (connectPois)
                 LoadOverlayPoiSegments(runtime);
+            else if (mode == 2)
+                LoadOverlayWanderingSegments(runtime);
 
             runtime.pE.z = runtime.segmentCount;
             overlays[slot++] = runtime;
@@ -643,6 +648,185 @@ public class TerrainStreamer : MonoBehaviour
         }
     }
 
+    // Lower cost means better road terrain: flat sand is cheap, cliff walls
+    // and plateaus are expensive, and the baked foot band is preferred.
+    private float CliffRouteCost(float worldX, float worldZ)
+    {
+        if (terrainGenerator == null)
+            return 1f;
+
+        Vector3 masks = terrainGenerator.SampleCliffVertexMasks(worldX, worldZ, 120f);
+        float region = masks.y;
+        float plateau = masks.z;
+        float foot = masks.x;
+
+        return 1f + region * 1.2f + plateau * 30f - foot * 8f;
+    }
+
+    // Integrated cost of a straight piece of road. Used when simplifying the
+    // routed polyline so a shortcut is only accepted when it does not cut
+    // back through a mesa.
+    private float SegmentRouteCost(Vector2 start, Vector2 end)
+    {
+        float distance = Vector2.Distance(start, end);
+
+        if (distance < 1f)
+            return 0f;
+
+        int steps = Mathf.Clamp(Mathf.CeilToInt(distance / 200f), 2, 48);
+        float total = 0f;
+        float peak = 0f;
+
+        for (int i = 0; i <= steps; i++)
+        {
+            Vector2 point = Vector2.Lerp(start, end, i / (float)steps);
+            float cost = CliffRouteCost(point.x, point.y);
+            total += cost;
+
+            if (cost > peak)
+                peak = cost;
+        }
+
+        float average = total / (steps + 1);
+        return (average + Mathf.Max(0f, peak - 8f) * 0.35f) * distance;
+    }
+
+    // Builds a serpentine route by choosing a lateral offset at each station
+    // along the straight leg. Dynamic programming keeps the road cheap and
+    // smooth instead of picking one isolated bend.
+    private List<Vector2> BuildCliffAwareRoute(Vector2 start, Vector2 end, int maxSegments)
+    {
+        List<Vector2> route = new List<Vector2> { start, end };
+        Vector2 delta = end - start;
+        float distance = delta.magnitude;
+
+        if (terrainGenerator == null || distance < 1f || maxSegments < 2)
+            return route;
+
+        Vector2 direction = delta / distance;
+        Vector2 perpendicular = new Vector2(-direction.y, direction.x);
+
+        int stationCount = Mathf.Clamp(Mathf.CeilToInt(distance / 450f) + 1, 4, 18);
+        int sampleCount = 25;
+        int zeroIndex = sampleCount / 2;
+        float maxOffset = Mathf.Min(3200f, Mathf.Max(900f, distance * 1.2f));
+        float[] offsets = new float[sampleCount];
+
+        for (int i = 0; i < sampleCount; i++)
+            offsets[i] = Mathf.Lerp(-maxOffset, maxOffset, i / (float)(sampleCount - 1));
+
+        float[,] cost = new float[stationCount, sampleCount];
+        int[,] from = new int[stationCount, sampleCount];
+
+        for (int station = 0; station < stationCount; station++)
+        {
+            Vector2 centre = start + delta * (station / (float)(stationCount - 1));
+
+            for (int sample = 0; sample < sampleCount; sample++)
+            {
+                Vector2 point = centre + perpendicular * offsets[sample];
+                float localCost = CliffRouteCost(point.x, point.y)
+                    + Mathf.Abs(offsets[sample]) * 0.00012f;
+
+                if (station == 0)
+                {
+                    cost[station, sample] = sample == zeroIndex
+                        ? localCost
+                        : float.MaxValue;
+                    continue;
+                }
+
+                float bestPrevious = float.MaxValue;
+                int bestIndex = zeroIndex;
+
+                for (int previous = 0; previous < sampleCount; previous++)
+                {
+                    float candidate = cost[station - 1, previous]
+                        + Mathf.Abs(offsets[sample] - offsets[previous]) * 0.0018f;
+
+                    if (candidate < bestPrevious)
+                    {
+                        bestPrevious = candidate;
+                        bestIndex = previous;
+                    }
+                }
+
+                cost[station, sample] = bestPrevious + localCost;
+                from[station, sample] = bestIndex;
+            }
+        }
+
+        // The road must finish exactly at the target waypoint.
+        for (int sample = 0; sample < sampleCount; sample++)
+        {
+            if (sample != zeroIndex)
+                cost[stationCount - 1, sample] = float.MaxValue;
+        }
+
+        int[] chosen = new int[stationCount];
+        chosen[stationCount - 1] = zeroIndex;
+
+        for (int station = stationCount - 1; station > 0; station--)
+            chosen[station - 1] = from[station, chosen[station]];
+
+        route.Clear();
+
+        for (int station = 0; station < stationCount; station++)
+        {
+            Vector2 centre = start + delta * (station / (float)(stationCount - 1));
+            route.Add(centre + perpendicular * offsets[chosen[station]]);
+        }
+
+        route[0] = start;
+        route[route.Count - 1] = end;
+
+        // Keep only the bends that actually avoid cliffs, within the segment
+        // budget available to this leg.
+        while (route.Count - 1 > maxSegments)
+        {
+            float bestPenalty = float.MaxValue;
+            int bestIndex = -1;
+
+            for (int i = 1; i < route.Count - 1; i++)
+            {
+                float penalty = SegmentRouteCost(route[i - 1], route[i + 1])
+                    - SegmentRouteCost(route[i - 1], route[i])
+                    - SegmentRouteCost(route[i], route[i + 1]);
+
+                if (penalty < bestPenalty)
+                {
+                    bestPenalty = penalty;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex < 0)
+                break;
+
+            route.RemoveAt(bestIndex);
+        }
+
+        return route;
+    }
+
+    private void AddRouteSegment(OverlayRuntime runtime, Vector2 start, Vector2 end)
+    {
+        if (runtime.segmentCount >= MaxPathSegments)
+            return;
+
+        if ((end - start).sqrMagnitude < 1f)
+            return;
+
+        runtime.segments[runtime.segmentCount++] = new Vector4(
+            start.x, start.y, end.x, end.y);
+    }
+
+    private void AddRouteSegments(OverlayRuntime runtime, List<Vector2> route)
+    {
+        for (int i = 0; i < route.Count - 1 && runtime.segmentCount < MaxPathSegments; i++)
+            AddRouteSegment(runtime, route[i], route[i + 1]);
+    }
+
     private void LoadOverlayPoiSegments(OverlayRuntime runtime)
     {
         runtime.segmentCount = 0;
@@ -689,13 +873,64 @@ public class TerrainStreamer : MonoBehaviour
             }
         }
 
-        for (int i = 0; i < points.Count - 1 && runtime.segmentCount < MaxPathSegments; i++)
+        if (points.Count < 2)
+            return;
+
+        int legCount = points.Count - 1;
+        float[] distances = new float[legCount];
+        float totalDistance = 0f;
+
+        for (int i = 0; i < legCount; i++)
         {
-            Vector2 start = points[i];
-            Vector2 end = points[i + 1];
-            runtime.segments[runtime.segmentCount++] = new Vector4(
-                start.x, start.y, end.x, end.y);
+            distances[i] = Vector2.Distance(points[i], points[i + 1]);
+            totalDistance += distances[i];
         }
+
+        if (totalDistance < 1f)
+            return;
+
+        int allocated = 0;
+        int[] budgets = new int[legCount];
+
+        for (int i = 0; i < legCount - 1; i++)
+        {
+            budgets[i] = Mathf.Clamp(
+                Mathf.RoundToInt(MaxPathSegments * distances[i] / totalDistance),
+                2, MaxPathSegments - 2 * (legCount - 1 - i));
+            allocated += budgets[i];
+        }
+
+        budgets[legCount - 1] = MaxPathSegments - allocated;
+
+        for (int i = 0; i < legCount; i++)
+        {
+            List<Vector2> route = BuildCliffAwareRoute(
+                points[i], points[i + 1], Mathf.Max(2, budgets[i]));
+            AddRouteSegments(runtime, route);
+        }
+    }
+
+    // Free trails use the same cliff-aware router, but their endpoints are a
+    // long deterministic line through the planet instead of POI waypoints.
+    private void LoadOverlayWanderingSegments(OverlayRuntime runtime)
+    {
+        runtime.segmentCount = 0;
+
+        if (terrainGenerator == null)
+            return;
+
+        float angle = Mathf.Atan2(runtime.pD.y, runtime.pD.x);
+        Vector2 direction = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+        Vector2 perpendicular = new Vector2(-direction.y, direction.x);
+        const float routeLength = 8000f;
+
+        Vector2 start = direction * (-routeLength * 0.5f)
+            + perpendicular * runtime.pD.z;
+        Vector2 end = direction * (routeLength * 0.5f)
+            + perpendicular * runtime.pD.z;
+
+        List<Vector2> route = BuildCliffAwareRoute(start, end, MaxPathSegments);
+        AddRouteSegments(runtime, route);
     }
 
     private void ApplyOverlayMaps(Material material)

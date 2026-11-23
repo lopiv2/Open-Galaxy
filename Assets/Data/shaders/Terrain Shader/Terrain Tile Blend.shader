@@ -184,21 +184,21 @@
                 float4 _Overlay0C;
                 float4 _Overlay0D;
                 float4 _Overlay0E;
-                float4 _Overlay0Segments[8];
+                float4 _Overlay0Segments[16];
 
                 float4 _Overlay1A;
                 float4 _Overlay1B;
                 float4 _Overlay1C;
                 float4 _Overlay1D;
                 float4 _Overlay1E;
-                float4 _Overlay1Segments[8];
+                float4 _Overlay1Segments[16];
 
                 float4 _Overlay2A;
                 float4 _Overlay2B;
                 float4 _Overlay2C;
                 float4 _Overlay2D;
                 float4 _Overlay2E;
-                float4 _Overlay2Segments[8];
+                float4 _Overlay2Segments[16];
 
             CBUFFER_END
 
@@ -485,7 +485,7 @@
                 float4 pB,
                 float4 pC,
                 float4 pD,
-                float4 pathSegments[8],
+                float4 pathSegments[16],
                 float segmentCount)
             {
                 int mode = (int)(pA.w + 0.5);
@@ -520,13 +520,9 @@
 
                 float distanceToPath = 1000000.0;
 
-                if (mode == 2)
+                if (segmentCount > 0.5)
                 {
-                    distanceToPath = abs(dot(warped, perpendicular) - pD.z);
-                }
-                else
-                {
-                    for (int i = 0; i < 8; i++)
+                    for (int i = 0; i < 16; i++)
                     {
                         if ((float)i >= segmentCount)
                             break;
@@ -536,11 +532,15 @@
                             OverlaySegmentDistance(warped, segment.xy, segment.zw));
                     }
                 }
+                else if (mode == 2)
+                {
+                    distanceToPath = abs(dot(warped, perpendicular) - pD.z);
+                }
 
                 float width = max(0.05, pB.x);
                 float feather = max(0.05, pB.y);
                 float edgeNoise = (ValueNoise(warped * noiseScale * 3.0 + seedOffset)
-                    - 0.5) * feather * 0.8;
+                    - 0.5) * feather * 0.15;
 
                 return 1.0 - smoothstep(width, width + feather,
                     distanceToPath + edgeNoise);

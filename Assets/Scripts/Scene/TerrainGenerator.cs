@@ -152,7 +152,7 @@ public class TerrainGenerator
     // Large deterministic zones where cliffs are allowed. Coverage is a
     // threshold on this field: 0.5 means roughly half the planet is cliff
     // country and half is open dunes, with soft transitions between them.
-    private float SampleCliffRegion(float worldX, float worldZ)
+    public float SampleCliffRegion(float worldX, float worldZ)
     {
         float coverage = Mathf.Clamp01(cliffCoverage);
 
@@ -179,7 +179,7 @@ public class TerrainGenerator
 
     // Sharp plateau mask: raising the ground where this is 1 carves a
     // near-vertical mesa wall regardless of the base terrain slope.
-    private float SampleCliffPlateau(float worldX, float worldZ)
+    public float SampleCliffPlateau(float worldX, float worldZ)
     {
         float frequency = Mathf.Max(0.00001f, cliffMaskFrequency);
 
@@ -240,7 +240,7 @@ public class TerrainGenerator
     // G = cliff region strength, B = plateau strength. The cliff-foot mask is
     // high where the plateau ramps up but has not reached the flat top yet,
     // so overlays can cover the sand at the bottom without painting the wall.
-    private Vector3 SampleCliffVertexMasks(float worldX, float worldZ, float sampleStep)
+    public Vector3 SampleCliffVertexMasks(float worldX, float worldZ, float sampleStep)
     {
         if (cliffsEnabled == false || cliffStrength <= 0.0001f)
             return Vector3.zero;

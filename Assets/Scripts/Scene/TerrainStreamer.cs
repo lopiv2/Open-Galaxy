@@ -87,6 +87,74 @@ public class TerrainStreamer : MonoBehaviour
         public int segmentCount;
     }
 
+    // Precomputed road cost for the rectangle a leg may wander through.
+    // Evaluating the terrain directly for every dynamic-programming edge is
+    // far too expensive, so the detailed sampling happens once per cell.
+    private class RouteCostField
+    {
+        private readonly float originX;
+        private readonly float originZ;
+        private readonly float cellSize;
+        private readonly int width;
+        private readonly int height;
+        private readonly float[] costs;
+
+        public RouteCostField(TerrainStreamer owner, Vector2 start, Vector2 end,
+            float maxOffset, float requestedCellSize)
+        {
+            Vector2 direction = (end - start).normalized;
+            Vector2 perpendicular = new Vector2(-direction.y, direction.x);
+            Vector2 a = start + perpendicular * maxOffset;
+            Vector2 b = start - perpendicular * maxOffset;
+            Vector2 c = end + perpendicular * maxOffset;
+            Vector2 d = end - perpendicular * maxOffset;
+
+            float minX = Mathf.Min(Mathf.Min(a.x, b.x), Mathf.Min(c.x, d.x));
+            float maxX = Mathf.Max(Mathf.Max(a.x, b.x), Mathf.Max(c.x, d.x));
+            float minZ = Mathf.Min(Mathf.Min(a.y, b.y), Mathf.Min(c.y, d.y));
+            float maxZ = Mathf.Max(Mathf.Max(a.y, b.y), Mathf.Max(c.y, d.y));
+
+            float spanX = maxX - minX;
+            float spanZ = maxZ - minZ;
+            cellSize = Mathf.Max(requestedCellSize,
+                Mathf.Max(spanX, spanZ) / 159f);
+
+            const int margin = 3;
+            width = Mathf.Clamp(Mathf.CeilToInt(spanX / cellSize) + margin * 2, 4, 160);
+            height = Mathf.Clamp(Mathf.CeilToInt(spanZ / cellSize) + margin * 2, 4, 160);
+
+            originX = (minX + maxX) * 0.5f - (width - 1) * cellSize * 0.5f;
+            originZ = (minZ + maxZ) * 0.5f - (height - 1) * cellSize * 0.5f;
+            costs = new float[width * height];
+
+            for (int z = 0; z < height; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    costs[z * width + x] = owner.CliffRouteCost(
+                        originX + x * cellSize,
+                        originZ + z * cellSize);
+                }
+            }
+        }
+
+        public float Sample(float worldX, float worldZ)
+        {
+            float gx = Mathf.Clamp((worldX - originX) / cellSize, 0f, width - 1.001f);
+            float gz = Mathf.Clamp((worldZ - originZ) / cellSize, 0f, height - 1.001f);
+            int x0 = Mathf.FloorToInt(gx);
+            int z0 = Mathf.FloorToInt(gz);
+            float tx = gx - x0;
+            float tz = gz - z0;
+            int index = z0 * width + x0;
+
+            return Mathf.Lerp(
+                Mathf.Lerp(costs[index], costs[index + 1], tx),
+                Mathf.Lerp(costs[index + width], costs[index + width + 1], tx),
+                tz);
+        }
+    }
+
     private readonly OverlayRuntime[] overlays = new OverlayRuntime[MaxOverlaySlots];
     private bool overlaysReady;
 
@@ -648,39 +716,63 @@ public class TerrainStreamer : MonoBehaviour
         }
     }
 
-    // Lower cost means better road terrain: flat sand is cheap, cliff walls
-    // and plateaus are expensive, and the baked foot band is preferred.
+    // Sampling distance used to detect near-vertical mesa and canyon walls.
+    private const float RouteWallSample = 70f;
+
+    // Lower cost means better road terrain. Mesa tops and canyon floors are
+    // usable; the steep edges between them are not. The sand apron is the
+    // cheapest place to run a road along a cliff foot.
     private float CliffRouteCost(float worldX, float worldZ)
     {
         if (terrainGenerator == null)
             return 1f;
 
-        Vector3 masks = terrainGenerator.SampleCliffVertexMasks(worldX, worldZ, 120f);
+        Vector4 masks = terrainGenerator.SampleCliffRouteMasks(worldX, worldZ, 120f);
         float region = masks.y;
         float plateau = masks.z;
-        float foot = masks.x;
+        float canyon = masks.w;
+        float apron = masks.x;
 
-        return 1f + region * 1.2f + plateau * 30f - foot * 8f;
+        // Mesa and canyon walls are the steep parts of the real terrain, not
+        // every wiggle of the noise masks. Measure the actual height slope
+        // across a short span so roads may run on top or along a canyon floor
+        // but never climb the vertical sides.
+        float heightXPlus = terrainGenerator.GetHeightAtLocalPosition(
+            Vector2Int.zero, new Vector3(worldX + RouteWallSample, 0f, worldZ));
+        float heightXMinus = terrainGenerator.GetHeightAtLocalPosition(
+            Vector2Int.zero, new Vector3(worldX - RouteWallSample, 0f, worldZ));
+        float heightZPlus = terrainGenerator.GetHeightAtLocalPosition(
+            Vector2Int.zero, new Vector3(worldX, 0f, worldZ + RouteWallSample));
+        float heightZMinus = terrainGenerator.GetHeightAtLocalPosition(
+            Vector2Int.zero, new Vector3(worldX, 0f, worldZ - RouteWallSample));
+
+        float slope = Mathf.Max(
+            Mathf.Abs(heightXPlus - heightXMinus),
+            Mathf.Abs(heightZPlus - heightZMinus)) / (RouteWallSample * 2f);
+        float wall = Mathf.InverseLerp(0.25f, 0.85f, slope) * region;
+        float cost = 0.65f + region * 0.25f + plateau * 1.2f
+            - apron * 0.6f - canyon * 0.8f + wall * 32f;
+
+        return Mathf.Max(0.15f, cost);
     }
 
-    // Integrated cost of a straight piece of road. Used when simplifying the
-    // routed polyline so a shortcut is only accepted when it does not cut
-    // back through a mesa.
-    private float SegmentRouteCost(Vector2 start, Vector2 end)
+    // Integrated cost of a straight piece of road. A single expensive sample
+    // (a wall crossing) is enough to reject the shortcut.
+    private float SegmentRouteCost(RouteCostField field, Vector2 start, Vector2 end)
     {
         float distance = Vector2.Distance(start, end);
 
         if (distance < 1f)
             return 0f;
 
-        int steps = Mathf.Clamp(Mathf.CeilToInt(distance / 200f), 2, 48);
+        int steps = Mathf.Clamp(Mathf.CeilToInt(distance / 70f), 3, 72);
         float total = 0f;
         float peak = 0f;
 
         for (int i = 0; i <= steps; i++)
         {
             Vector2 point = Vector2.Lerp(start, end, i / (float)steps);
-            float cost = CliffRouteCost(point.x, point.y);
+            float cost = field.Sample(point.x, point.y);
             total += cost;
 
             if (cost > peak)
@@ -688,12 +780,13 @@ public class TerrainStreamer : MonoBehaviour
         }
 
         float average = total / (steps + 1);
-        return (average + Mathf.Max(0f, peak - 8f) * 0.35f) * distance;
+        return (average + Mathf.Max(0f, peak - 4f) * 1.6f) * distance;
     }
 
-    // Builds a serpentine route by choosing a lateral offset at each station
-    // along the straight leg. Dynamic programming keeps the road cheap and
-    // smooth instead of picking one isolated bend.
+    // Builds a curved route by choosing a lateral offset at each station along
+    // the straight leg. Dynamic programming prices the actual ground between
+    // stations, so the road bends around mesa walls and follows canyon floors
+    // instead of jumping across them.
     private List<Vector2> BuildCliffAwareRoute(Vector2 start, Vector2 end, int maxSegments)
     {
         List<Vector2> route = new List<Vector2> { start, end };
@@ -706,17 +799,20 @@ public class TerrainStreamer : MonoBehaviour
         Vector2 direction = delta / distance;
         Vector2 perpendicular = new Vector2(-direction.y, direction.x);
 
-        int stationCount = Mathf.Clamp(Mathf.CeilToInt(distance / 450f) + 1, 4, 18);
-        int sampleCount = 25;
+        int stationCount = Mathf.Clamp(Mathf.CeilToInt(distance / 700f) + 1, 5, 12);
+        int sampleCount = 21;
         int zeroIndex = sampleCount / 2;
-        float maxOffset = Mathf.Min(3200f, Mathf.Max(900f, distance * 1.2f));
+        float maxOffset = Mathf.Min(2400f, Mathf.Max(700f, distance * 0.9f));
         float[] offsets = new float[sampleCount];
 
         for (int i = 0; i < sampleCount; i++)
             offsets[i] = Mathf.Lerp(-maxOffset, maxOffset, i / (float)(sampleCount - 1));
 
-        float[,] cost = new float[stationCount, sampleCount];
-        int[,] from = new int[stationCount, sampleCount];
+        RouteCostField field = new RouteCostField(
+            this, start, end, maxOffset + RouteWallSample * 2f, 80f);
+
+        Vector2[,] points = new Vector2[stationCount, sampleCount];
+        float[,] pointCost = new float[stationCount, sampleCount];
 
         for (int station = 0; station < stationCount; station++)
         {
@@ -725,24 +821,54 @@ public class TerrainStreamer : MonoBehaviour
             for (int sample = 0; sample < sampleCount; sample++)
             {
                 Vector2 point = centre + perpendicular * offsets[sample];
-                float localCost = CliffRouteCost(point.x, point.y)
-                    + Mathf.Abs(offsets[sample]) * 0.00012f;
+                points[station, sample] = point;
+                pointCost[station, sample] = field.Sample(point.x, point.y)
+                    + Mathf.Abs(offsets[sample]) * 0.0002f;
+            }
+        }
 
-                if (station == 0)
+        float[,,] edgeCost = new float[stationCount - 1, sampleCount, sampleCount];
+
+        for (int station = 1; station < stationCount; station++)
+        {
+            for (int previous = 0; previous < sampleCount; previous++)
+            {
+                for (int sample = 0; sample < sampleCount; sample++)
                 {
-                    cost[station, sample] = sample == zeroIndex
-                        ? localCost
-                        : float.MaxValue;
-                    continue;
+                    edgeCost[station - 1, previous, sample] =
+                        SegmentRouteCost(field, points[station - 1, previous], points[station, sample]);
                 }
+            }
+        }
 
+        float[,] cost = new float[stationCount, sampleCount];
+        int[,] from = new int[stationCount, sampleCount];
+
+        for (int sample = 0; sample < sampleCount; sample++)
+            cost[0, sample] = sample == zeroIndex ? pointCost[0, sample] : float.MaxValue;
+
+        for (int station = 1; station < stationCount; station++)
+        {
+            for (int sample = 0; sample < sampleCount; sample++)
+            {
                 float bestPrevious = float.MaxValue;
                 int bestIndex = zeroIndex;
 
                 for (int previous = 0; previous < sampleCount; previous++)
                 {
+                    if (cost[station - 1, previous] >= float.MaxValue * 0.5f)
+                        continue;
+
                     float candidate = cost[station - 1, previous]
-                        + Mathf.Abs(offsets[sample] - offsets[previous]) * 0.0018f;
+                        + edgeCost[station - 1, previous, sample];
+
+                    if (station > 1)
+                    {
+                        int before = from[station - 1, previous];
+                        float lastBend = offsets[previous] - offsets[before];
+                        float nextBend = offsets[sample] - offsets[previous];
+                        candidate += Mathf.Abs(nextBend - lastBend) * 0.9f;
+                    }
 
                     if (candidate < bestPrevious)
                     {
@@ -751,7 +877,7 @@ public class TerrainStreamer : MonoBehaviour
                     }
                 }
 
-                cost[station, sample] = bestPrevious + localCost;
+                cost[station, sample] = bestPrevious + pointCost[station, sample];
                 from[station, sample] = bestIndex;
             }
         }
@@ -772,10 +898,7 @@ public class TerrainStreamer : MonoBehaviour
         route.Clear();
 
         for (int station = 0; station < stationCount; station++)
-        {
-            Vector2 centre = start + delta * (station / (float)(stationCount - 1));
-            route.Add(centre + perpendicular * offsets[chosen[station]]);
-        }
+            route.Add(points[station, chosen[station]]);
 
         route[0] = start;
         route[route.Count - 1] = end;
@@ -789,9 +912,9 @@ public class TerrainStreamer : MonoBehaviour
 
             for (int i = 1; i < route.Count - 1; i++)
             {
-                float penalty = SegmentRouteCost(route[i - 1], route[i + 1])
-                    - SegmentRouteCost(route[i - 1], route[i])
-                    - SegmentRouteCost(route[i], route[i + 1]);
+                float penalty = SegmentRouteCost(field, route[i - 1], route[i + 1])
+                    - SegmentRouteCost(field, route[i - 1], route[i])
+                    - SegmentRouteCost(field, route[i], route[i + 1]);
 
                 if (penalty < bestPenalty)
                 {

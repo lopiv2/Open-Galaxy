@@ -197,6 +197,17 @@ public class TerrainGenerator
             Mathf.InverseLerp(threshold, threshold + edge, field));
     }
 
+    // Ridged noise carves the gorge network between mesas. Exposed so the
+    // road planner can follow canyon floors instead of cutting their walls.
+    public float SampleCliffCanyon(float worldX, float worldZ)
+    {
+        float ridge = cliffCanyonNoise.GetNoise(worldX, worldZ);
+        float canyonWidth = Mathf.Clamp(cliffCanyonWidth, 0.002f, 0.5f);
+
+        return Mathf.SmoothStep(0f, 1f,
+            Mathf.InverseLerp(0.35f, 0.35f + canyonWidth, ridge));
+    }
+
     // Raises mesas and cuts canyon gorges. Works on top of the base biome
     // height; coverage/strength come from the per-planet JSON settings.
     private float ApplyCliffs(float height, float worldX, float worldZ)
@@ -224,10 +235,7 @@ public class TerrainGenerator
         float mesaTop = Mathf.Max(0f, cliffMesaHeight) + topNoise * Mathf.Max(0f, cliffMesaRoughness);
 
         // Ridged lines become canyon gorges cut through the mesas.
-        float ridge = cliffCanyonNoise.GetNoise(worldX, worldZ);
-        float canyonWidth = Mathf.Clamp(cliffCanyonWidth, 0.002f, 0.5f);
-        float canyon = Mathf.SmoothStep(0f, 1f,
-            Mathf.InverseLerp(0.35f, 0.35f + canyonWidth, ridge));
+        float canyon = SampleCliffCanyon(worldX, worldZ);
 
         float carved = height
             + plateau * mesaTop
@@ -270,6 +278,20 @@ public class TerrainGenerator
             Mathf.InverseLerp(0.05f, 0.40f, plateau));
 
         return new Vector3(region * nearPlateau * lowerSide, region, plateau);
+    }
+
+    // Compact cliff dataset for route planning: X = sand apron, Y = region,
+    // Z = mesa top, W = canyon floor. The road router uses W to follow gorges
+    // and the edges of Z/W to avoid near-vertical walls.
+    public Vector4 SampleCliffRouteMasks(float worldX, float worldZ, float sampleStep)
+    {
+        Vector3 masks = SampleCliffVertexMasks(worldX, worldZ, sampleStep);
+
+        return new Vector4(
+            masks.x,
+            masks.y,
+            masks.z,
+            masks.y > 0.0001f ? SampleCliffCanyon(worldX, worldZ) * masks.y : 0f);
     }
 
     private float SampleTerrainHeight(float worldX, float worldZ)

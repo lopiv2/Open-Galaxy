@@ -6,7 +6,7 @@ Shader "Custom/VegetationInstanced"
         _OpacityMap ("Opacity (R)", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1,1,1,1)
         _Cutoff ("Alpha Cutoff", Range(0,1)) = 0.45
-        _UseOpacityMap ("Use Opacity Map (0=solid mesh, 1=billboard)", Float) = 0
+        _UseOpacityMap ("Use Opacity Map (0=solid mesh, 1=use mask)", Float) = 0
         _Brightness ("Brightness", Range(0,4)) = 1.6
         _WindDirection ("Wind Direction (XZ)", Vector) = (1,0,0,0)
         _WindStrength ("Wind Strength (m)", Float) = 0.06
@@ -25,10 +25,10 @@ Shader "Custom/VegetationInstanced"
         {
             Tags { "LightMode"="UniversalForward" }
             HLSLPROGRAM
+            #pragma target 3.5
             #pragma vertex vert
             #pragma fragment frag
             #pragma multi_compile_instancing
-            #pragma instancing_options procedural:setup
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             struct Attributes
@@ -57,38 +57,22 @@ Shader "Custom/VegetationInstanced"
             float _WindFrequency;
             float _WindHeight;
 
-            #ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-                StructuredBuffer<float4x4> _TransformBuffer;
-            #endif
-
-            void setup()
-            {
-                #ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-                    float4x4 data = _TransformBuffer[unity_InstanceID];
-                    unity_ObjectToWorld = data;
-                    float3x3 w2oRotation = transpose((float3x3)data);
-                    unity_WorldToObject._m00_m01_m02 = w2oRotation._m00_m01_m02;
-                    unity_WorldToObject._m10_m11_m12 = w2oRotation._m10_m11_m12;
-                    unity_WorldToObject._m20_m21_m22 = w2oRotation._m20_m21_m22;
-                    unity_WorldToObject._m03_m13_m23 = -mul(w2oRotation, data._m03_m13_m23);
-                    unity_WorldToObject._m30_m31_m32_m33 = float4(0,0,0,1);
-                #endif
-            }
-
             Varyings vert(Attributes input)
             {
                 Varyings o = (Varyings)0;
                 UNITY_SETUP_INSTANCE_ID(input);
                 UNITY_TRANSFER_INSTANCE_ID(input, o);
-                setup();
 
-                float3 worldPos = mul(unity_ObjectToWorld, float4(input.positionOS.xyz, 1)).xyz;
+                // UNITY_MATRIX_M (not unity_ObjectToWorld) is required for
+                // Graphics.DrawMeshInstanced: Unity maps it to the per-instance
+                // matrix array, while unity_ObjectToWorld holds the batch matrix.
+                float3 worldPos = mul(UNITY_MATRIX_M, float4(input.positionOS.xyz, 1)).xyz;
                 float height01 = saturate(input.positionOS.y / max(0.001, _WindHeight));
                 float bend = height01 * height01;
                 float2 windDir = _WindDirection.xz;
                 windDir /= max(0.0001, length(windDir));
                 float instanceOffset = 0.0;
-                #if defined(UNITY_VERTEX_INPUT_INSTANCE_ID)
+                #ifdef UNITY_INSTANCING_ENABLED
                     instanceOffset = (float)(unity_InstanceID % 97) * 0.7;
                 #endif
                 float phase = _Time.y * _WindSpeed

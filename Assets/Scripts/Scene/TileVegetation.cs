@@ -141,10 +141,37 @@ public class TileVegetation : MonoBehaviour
         lastWorldPosition = transform.position;
     }
 
-    // Runs in both play mode and edit mode ([ExecuteAlways]). Drawing here,
-    // before the render pass, makes immediate-mode draws show up in the same
-    // frame instead of one frame late.
+    private void OnEnable()
+    {
+        RenderPipelineManager.beginCameraRendering += HandleBeginCameraRendering;
+    }
+
+    private void OnDisable()
+    {
+        RenderPipelineManager.beginCameraRendering -= HandleBeginCameraRendering;
+    }
+
+    // Play mode: one draw per frame.
     private void Update()
+    {
+        if (Application.isPlaying)
+        {
+            Draw(null);
+        }
+    }
+
+    // Edit mode: draw for the camera that is about to render. Update is
+    // throttled in the editor, so relying on it left the terrain preview empty
+    // until something forced a player-loop tick.
+    private void HandleBeginCameraRendering(ScriptableRenderContext context, Camera camera)
+    {
+        if (!Application.isPlaying)
+        {
+            Draw(camera);
+        }
+    }
+
+    private void Draw(Camera camera)
     {
         if (!initialized || localMatrices == null || localMatrices.Length == 0
             || worldBatches == null || batchCounts == null
@@ -192,7 +219,7 @@ public class TileVegetation : MonoBehaviour
                 ShadowCastingMode.Off,
                 false,
                 gameObject.layer,
-                null,
+                camera,
                 LightProbeUsage.Off);
         }
     }

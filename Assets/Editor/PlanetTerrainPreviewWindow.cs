@@ -752,11 +752,25 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         if (!haveBounds)
             return;
 
+        Vector3 focus = bounds.center;
+        float distance = Mathf.Max(10f, bounds.extents.magnitude * 1.35f);
+
+        // Bushes are 1-3 m tall and disappear at the distance needed to frame a
+        // whole 1-2 km preview. When vegetation is enabled, frame the centre
+        // tile up close so the instanced bushes can actually be inspected.
+        if (showVegetation && previewVegetationViewer != null)
+        {
+            focus = new Vector3(
+                previewVegetationViewer.position.x,
+                bounds.center.y,
+                previewVegetationViewer.position.z);
+            distance = 220f;
+        }
+
         SceneView view = SceneView.lastActiveSceneView;
         if (view != null)
         {
-            view.LookAt(bounds.center, Quaternion.Euler(35f, 45f, 0f),
-                Mathf.Max(10f, bounds.extents.magnitude * 1.35f));
+            view.LookAt(focus, Quaternion.Euler(35f, 45f, 0f), distance);
             view.Repaint();
         }
 

@@ -1,8 +1,11 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using UnityEditor;
 using UnityEngine;
 
@@ -26,6 +29,27 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     [SerializeField] private int centerTileZ;
     [SerializeField] private bool showOverlays = true;
     [SerializeField] private bool showDetail = true;
+    [SerializeField] private bool regenerateAfterApply = true;
+
+    // Editable copy of the selected planet. The preview uses these values;
+    // "Aplicar a JSON" writes them back to StarSystems.json.
+    [SerializeField] private string draftPlanet = "";
+    [SerializeField] private string draftPlanetType = "";
+    [SerializeField] private int draftSeed = 1138;
+    [SerializeField] private string draftTerrainTexture = "";
+    [SerializeField] private string draftDetailTexture = "";
+    [SerializeField] private bool draftHasCliffs;
+    [SerializeField] private bool draftCliffsFromJson;
+    [SerializeField] private CliffSettings draftCliffs = new CliffSettings();
+    [SerializeField] private TerrainOverlay[] draftOverlays = new TerrainOverlay[0];
+
+    [SerializeField] private bool configFoldout = true;
+    [SerializeField] private bool generalFoldout = true;
+    [SerializeField] private bool cliffsFoldout;
+    [SerializeField] private bool overlaysFoldout = true;
+    [SerializeField] private bool[] overlayFoldouts = new bool[3];
+
+    private static readonly string[] OverlayModes = { "patch", "cliffFoot", "path", "poiPath" };
 
     private StarSystems starSystems;
     private string[] allPlanets = new string[0];
@@ -104,6 +128,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         }
 
         RebuildFilteredPlanets();
+        SyncDraftIfNeeded(true);
         SetStatus("StarSystems.json cargado. " + allPlanets.Length + " planetas disponibles.", MessageType.Info);
     }
 
@@ -137,10 +162,13 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
     private void OnGUI()
     {
+        SyncDraftIfNeeded();
+
         EditorGUILayout.LabelField("Planet Terrain Preview", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "Genera un trozo pequeño del terreno usando los parámetros del planeta en StarSystems.json. " +
-            "No entra en Play Mode.", MessageType.Info);
+            "Edita los parámetros del planeta, genera la vista previa sin Play Mode y pulsa " +
+            "'Aplicar a JSON' para sobrescribir la configuración en StarSystems.json.",
+            MessageType.Info);
 
         EditorGUILayout.BeginHorizontal();
         string newSearch = EditorGUILayout.TextField("Buscar", searchText);
@@ -163,7 +191,10 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
             int newIndex = EditorGUILayout.Popup("Planeta", index, filteredPlanets);
             if (newIndex != index)
+            {
                 selectedPlanet = filteredPlanets[newIndex];
+                SyncDraftIfNeeded(true);
+            }
         }
         else
         {
@@ -171,15 +202,37 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         }
 
         StarSystem system = FindSelectedSystem();
-        if (dataLoaded && system != null)
+        bool hasPlanet = dataLoaded && system != null;
+
+        EditorGUILayout.Space(4f);
+        configFoldout = EditorGUILayout.Foldout(
+            configFoldout, "Configuración editable (se guarda en StarSystems.json)", true,
+            EditorStyles.foldoutHeader);
+
+        if (configFoldout)
         {
+            EditorGUI.BeginDisabledGroup(!hasPlanet);
+            DrawGeneralConfig();
+            DrawCliffConfig();
+            DrawOverlayConfig();
+            EditorGUI.EndDisabledGroup();
+
             EditorGUILayout.Space(4f);
-            EditorGUILayout.LabelField("Parámetros del planeta", EditorStyles.boldLabel);
-            EditorGUILayout.LabelField("Seed", system.seed.ToString());
-            EditorGUILayout.LabelField("Texturas", GetTerrainTextureKeywords(system));
-            EditorGUILayout.LabelField("Acantilados", system.cliffs != null && system.cliffs.enabled ? "activados" : "desactivados");
-            EditorGUILayout.LabelField("Detalle", string.IsNullOrEmpty(system.detailTexture) ? "ninguno" : system.detailTexture);
-            EditorGUILayout.LabelField("Overlays", system.overlays == null ? "0" : system.overlays.Length.ToString());
+            EditorGUI.BeginDisabledGroup(!hasPlanet);
+            EditorGUILayout.BeginHorizontal();
+            if (GUILayout.Button("Restablecer desde JSON"))
+            {
+                SyncDraftIfNeeded(true);
+                SetStatus("Parámetros restablecidos desde StarSystems.json.", MessageType.Info);
+            }
+
+            if (GUILayout.Button("Aplicar a JSON", GUILayout.Height(28f)))
+                ApplyConfigToJson();
+            EditorGUILayout.EndHorizontal();
+
+            regenerateAfterApply = EditorGUILayout.Toggle(
+                "Regenerar vista previa al aplicar", regenerateAfterApply);
+            EditorGUI.EndDisabledGroup();
         }
 
         EditorGUILayout.Space(6f);
@@ -191,9 +244,9 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         showDetail = EditorGUILayout.Toggle("Detalle cercano", showDetail);
 
         EditorGUILayout.Space(6f);
-        EditorGUI.BeginDisabledGroup(!dataLoaded || system == null);
+        EditorGUI.BeginDisabledGroup(!hasPlanet);
         if (GUILayout.Button("Generar vista previa", GUILayout.Height(30f)))
-            GeneratePreview(system);
+            GeneratePreview(null);
         EditorGUI.EndDisabledGroup();
 
         if (GUILayout.Button("Limpiar vista previa"))
@@ -203,26 +256,155 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         EditorGUILayout.HelpBox(statusMessage, statusType);
     }
 
+    private void DrawGeneralConfig()
+    {
+        generalFoldout = EditorGUILayout.Foldout(generalFoldout, "General", true);
+        if (!generalFoldout)
+            return;
+
+        draftSeed = EditorGUILayout.IntField("Seed", draftSeed);
+        draftPlanetType = EditorGUILayout.TextField("Planet type", draftPlanetType ?? "");
+        draftTerrainTexture = EditorGUILayout.TextField("Texturas base", draftTerrainTexture ?? "");
+        draftDetailTexture = EditorGUILayout.TextField("Textura detalle", draftDetailTexture ?? "");
+        EditorGUILayout.HelpBox(
+            "Texturas base admite palabras clave separadas por comas. Textura detalle usa <nombre>_d/_n/_h/_ao.",
+            MessageType.None);
+    }
+
+    private void DrawCliffConfig()
+    {
+        cliffsFoldout = EditorGUILayout.Foldout(cliffsFoldout, "Acantilados / mesas / cañones", true);
+        if (!cliffsFoldout)
+            return;
+
+        bool hasCliffs = EditorGUILayout.Toggle("Editar bloque de cliffs", draftHasCliffs);
+        if (hasCliffs != draftHasCliffs)
+        {
+            draftHasCliffs = hasCliffs;
+            if (draftHasCliffs && draftCliffs == null)
+                draftCliffs = new CliffSettings();
+
+            if (!draftHasCliffs && draftCliffsFromJson && draftCliffs != null)
+                draftCliffs.enabled = false;
+        }
+
+        if (!draftHasCliffs || draftCliffs == null)
+        {
+            EditorGUILayout.HelpBox(
+                draftCliffsFromJson
+                    ? "El bloque existente se guardará con enabled = false."
+                    : "Este planeta no tiene bloque de cliffs. Actívalo para añadirlo.",
+                MessageType.None);
+            return;
+        }
+
+        EditorGUI.indentLevel++;
+        draftCliffs.enabled = EditorGUILayout.Toggle("Enabled", draftCliffs.enabled);
+        draftCliffs.mesaHeight = EditorGUILayout.FloatField("Mesa height", draftCliffs.mesaHeight);
+        draftCliffs.mesaRoughness = EditorGUILayout.FloatField("Mesa roughness", draftCliffs.mesaRoughness);
+        draftCliffs.edgeWidth = EditorGUILayout.FloatField("Edge width", draftCliffs.edgeWidth);
+        draftCliffs.canyonDepth = EditorGUILayout.FloatField("Canyon depth", draftCliffs.canyonDepth);
+        draftCliffs.canyonWidth = EditorGUILayout.FloatField("Canyon width", draftCliffs.canyonWidth);
+        draftCliffs.strength = EditorGUILayout.FloatField("Strength", draftCliffs.strength);
+        draftCliffs.coverage = EditorGUILayout.FloatField("Coverage", draftCliffs.coverage);
+        draftCliffs.regionFrequency = EditorGUILayout.FloatField("Region frequency", draftCliffs.regionFrequency);
+        draftCliffs.regionFeather = EditorGUILayout.FloatField("Region feather", draftCliffs.regionFeather);
+        draftCliffs.maskThreshold = EditorGUILayout.FloatField("Mask threshold", draftCliffs.maskThreshold);
+        draftCliffs.maskFrequency = EditorGUILayout.FloatField("Mask frequency", draftCliffs.maskFrequency);
+        draftCliffs.slopeStart = EditorGUILayout.FloatField("Slope start", draftCliffs.slopeStart);
+        draftCliffs.slopeSoftness = EditorGUILayout.FloatField("Slope softness", draftCliffs.slopeSoftness);
+        draftCliffs.textureType = EditorGUILayout.TextField("Texture type", draftCliffs.textureType ?? "");
+        draftCliffs.verticesPerSide = EditorGUILayout.IntField("Vertices per side", draftCliffs.verticesPerSide);
+        draftCliffs.outerVerticesPerSide = EditorGUILayout.IntField("Outer vertices per side", draftCliffs.outerVerticesPerSide);
+        draftCliffs.highDetailRadiusKm = EditorGUILayout.FloatField("High detail radius km", draftCliffs.highDetailRadiusKm);
+        EditorGUI.indentLevel--;
+    }
+
+    private void DrawOverlayConfig()
+    {
+        overlaysFoldout = EditorGUILayout.Foldout(overlaysFoldout, "Overlays (máx. 3)", true);
+        if (!overlaysFoldout)
+            return;
+
+        if (draftOverlays == null)
+            draftOverlays = new TerrainOverlay[0];
+
+        for (int i = 0; i < draftOverlays.Length; i++)
+        {
+            TerrainOverlay overlay = draftOverlays[i];
+            if (overlay == null)
+                continue;
+
+            if (i >= overlayFoldouts.Length)
+                Array.Resize(ref overlayFoldouts, i + 1);
+
+            string label = string.IsNullOrWhiteSpace(overlay.texture)
+                ? "Overlay " + (i + 1) + " (sin textura)"
+                : "Overlay " + (i + 1) + ": " + overlay.texture + " [" + overlay.mode + "]";
+
+            EditorGUILayout.BeginHorizontal();
+            overlayFoldouts[i] = EditorGUILayout.Foldout(overlayFoldouts[i], label, true);
+            if (GUILayout.Button("Quitar", GUILayout.Width(60f)))
+            {
+                RemoveOverlayAt(i);
+                EditorGUILayout.EndHorizontal();
+                break;
+            }
+            EditorGUILayout.EndHorizontal();
+
+            if (!overlayFoldouts[i])
+                continue;
+
+            EditorGUI.indentLevel++;
+            overlay.enabled = EditorGUILayout.Toggle("Enabled", overlay.enabled);
+            overlay.label = EditorGUILayout.TextField("Label", overlay.label ?? "");
+            overlay.texture = EditorGUILayout.TextField("Texture", overlay.texture ?? "");
+
+            int modeIndex = ModeToIndex(overlay.mode);
+            int newModeIndex = EditorGUILayout.Popup("Mode", modeIndex, OverlayModes);
+            if (newModeIndex != modeIndex)
+                overlay.mode = OverlayModes[newModeIndex];
+
+            overlay.tiling = EditorGUILayout.FloatField("Tiling", overlay.tiling);
+            overlay.strength = EditorGUILayout.FloatField("Strength", overlay.strength);
+            overlay.fadeDistance = EditorGUILayout.FloatField("Fade distance", overlay.fadeDistance);
+            overlay.normalStrength = EditorGUILayout.FloatField("Normal strength", overlay.normalStrength);
+            overlay.aoStrength = EditorGUILayout.FloatField("AO strength", overlay.aoStrength);
+            overlay.width = EditorGUILayout.FloatField("Width", overlay.width);
+            overlay.feather = EditorGUILayout.FloatField("Feather", overlay.feather);
+            overlay.wanderAmplitude = EditorGUILayout.FloatField("Wander amplitude", overlay.wanderAmplitude);
+            overlay.wanderFrequency = EditorGUILayout.FloatField("Wander frequency", overlay.wanderFrequency);
+            overlay.angle = EditorGUILayout.FloatField("Angle", overlay.angle);
+            overlay.offset = EditorGUILayout.FloatField("Offset", overlay.offset);
+            overlay.noiseScale = EditorGUILayout.FloatField("Noise scale", overlay.noiseScale);
+            overlay.threshold = EditorGUILayout.FloatField("Threshold", overlay.threshold);
+            overlay.patchFeather = EditorGUILayout.FloatField("Patch feather", overlay.patchFeather);
+            overlay.seedOffset = EditorGUILayout.FloatField("Seed offset", overlay.seedOffset);
+            overlay.connectPois = EditorGUILayout.Toggle("Connect POIs", overlay.connectPois);
+            EditorGUI.indentLevel--;
+        }
+
+        EditorGUI.BeginDisabledGroup(draftOverlays.Length >= 3);
+        if (GUILayout.Button("Añadir overlay"))
+        {
+            Array.Resize(ref draftOverlays, draftOverlays.Length + 1);
+            draftOverlays[draftOverlays.Length - 1] = new TerrainOverlay
+            {
+                label = "Nuevo overlay",
+                texture = "",
+                mode = "patch"
+            };
+        }
+        EditorGUI.EndDisabledGroup();
+    }
+
     private void GeneratePreview(StarSystem system)
     {
-        // Re-read the JSON on every generation so edits to StarSystems.json
-        // are visible without closing/reopening the window.
-        TextAsset source = Resources.Load<TextAsset>(OGGetAddress.files + "StarSystems");
-        if (source == null)
-        {
-            SetStatus("No se encontró Assets/Resources/files/StarSystems.json.", MessageType.Error);
-            return;
-        }
-
-        StarSystems fresh = JsonUtility.FromJson<StarSystems>(source.text);
-        if (fresh == null || fresh.starSystemsData == null)
-        {
-            SetStatus("StarSystems.json no se pudo parsear.", MessageType.Error);
-            return;
-        }
-
-        starSystems = fresh;
-        system = FindSelectedSystem();
+        // The preview always uses the editable draft, so changes can be
+        // checked before they are written to StarSystems.json.
+        SyncDraftIfNeeded();
+        if (system == null)
+            system = BuildDraftSystem();
 
         if (system == null)
         {
@@ -548,6 +730,712 @@ public class PlanetTerrainPreviewWindow : EditorWindow
                 DestroyImmediate(material);
         }
         generatedMaterials.Clear();
+    }
+
+    [Serializable]
+    private class OverlayArray
+    {
+        public TerrainOverlay[] items;
+    }
+
+    private void SyncDraftIfNeeded(bool force = false)
+    {
+        if (!force
+            && string.Equals(draftPlanet, selectedPlanet, StringComparison.OrdinalIgnoreCase)
+            && draftOverlays != null)
+        {
+            return;
+        }
+
+        StarSystem system = FindSelectedSystem();
+        draftPlanet = selectedPlanet ?? "";
+
+        if (system == null)
+        {
+            draftPlanetType = "";
+            draftSeed = 1138;
+            draftTerrainTexture = "";
+            draftDetailTexture = "";
+            draftHasCliffs = false;
+            draftCliffsFromJson = false;
+            draftCliffs = new CliffSettings();
+            draftOverlays = new TerrainOverlay[0];
+        }
+        else
+        {
+            draftPlanetType = system.planetType ?? "";
+            draftSeed = system.seed;
+            draftTerrainTexture = system.terrainTexture ?? "";
+            draftDetailTexture = system.detailTexture ?? "";
+            draftHasCliffs = system.cliffs != null;
+            draftCliffsFromJson = draftHasCliffs;
+            draftCliffs = draftHasCliffs ? CloneCliffs(system.cliffs) : new CliffSettings();
+            draftOverlays = CloneOverlays(system.overlays);
+        }
+
+        if (overlayFoldouts == null || overlayFoldouts.Length < 3)
+            overlayFoldouts = new bool[3];
+    }
+
+    private StarSystem BuildDraftSystem()
+    {
+        if (string.IsNullOrEmpty(selectedPlanet))
+            return null;
+
+        return new StarSystem
+        {
+            Planet = selectedPlanet,
+            planetType = draftPlanetType,
+            seed = draftSeed,
+            terrainTexture = draftTerrainTexture,
+            detailTexture = draftDetailTexture,
+            cliffs = draftHasCliffs ? CloneCliffs(draftCliffs) : null,
+            overlays = CloneOverlays(draftOverlays)
+        };
+    }
+
+    private static CliffSettings CloneCliffs(CliffSettings source)
+    {
+        if (source == null)
+            return new CliffSettings();
+
+        CliffSettings copy = JsonUtility.FromJson<CliffSettings>(JsonUtility.ToJson(source));
+        return copy ?? new CliffSettings();
+    }
+
+    private static TerrainOverlay[] CloneOverlays(TerrainOverlay[] source)
+    {
+        if (source == null)
+            return new TerrainOverlay[0];
+
+        OverlayArray wrapper = JsonUtility.FromJson<OverlayArray>(
+            JsonUtility.ToJson(new OverlayArray { items = source }));
+
+        return wrapper != null && wrapper.items != null ? wrapper.items : new TerrainOverlay[0];
+    }
+
+    private void RemoveOverlayAt(int index)
+    {
+        if (draftOverlays == null || index < 0 || index >= draftOverlays.Length)
+            return;
+
+        List<TerrainOverlay> list = new List<TerrainOverlay>(draftOverlays);
+        list.RemoveAt(index);
+        draftOverlays = list.ToArray();
+
+        if (overlayFoldouts == null || index >= overlayFoldouts.Length)
+            return;
+
+        for (int i = index; i < overlayFoldouts.Length - 1; i++)
+            overlayFoldouts[i] = overlayFoldouts[i + 1];
+        overlayFoldouts[overlayFoldouts.Length - 1] = false;
+    }
+
+    private static int ModeToIndex(string mode)
+    {
+        int index = Array.FindIndex(OverlayModes,
+            candidate => string.Equals(candidate, mode, StringComparison.OrdinalIgnoreCase));
+        return index < 0 ? 0 : index;
+    }
+
+    private void ApplyConfigToJson()
+    {
+        SyncDraftIfNeeded();
+
+        if (string.IsNullOrEmpty(selectedPlanet))
+        {
+            SetStatus("Selecciona un planeta válido.", MessageType.Warning);
+            return;
+        }
+
+        try
+        {
+            string path = GetStarSystemsPath();
+            if (!File.Exists(path))
+            {
+                SetStatus("No se encontró " + path, MessageType.Error);
+                return;
+            }
+
+            string json = File.ReadAllText(path);
+            int objectStart;
+            int objectEnd;
+            if (!TryFindPlanetObject(json, selectedPlanet, out objectStart, out objectEnd))
+            {
+                SetStatus("No se encontró el objeto del planeta '" + selectedPlanet + "' en el JSON.", MessageType.Error);
+                return;
+            }
+
+            string planetObject = json.Substring(objectStart, objectEnd - objectStart + 1);
+            string nl = json.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n";
+
+            planetObject = ReplaceJsonField(planetObject, "seed",
+                draftSeed.ToString(CultureInfo.InvariantCulture),
+                GetFieldIndent(planetObject, "seed", nl), nl);
+
+            planetObject = ReplaceJsonField(planetObject, "planetType",
+                JsonString(draftPlanetType),
+                GetFieldIndent(planetObject, "planetType", nl), nl);
+
+            planetObject = ReplaceJsonField(planetObject, "terrainTexture",
+                JsonString(draftTerrainTexture),
+                GetFieldIndent(planetObject, "terrainTexture", nl), nl);
+
+            planetObject = ReplaceJsonField(planetObject, "detailTexture",
+                JsonString(draftDetailTexture),
+                GetFieldIndent(planetObject, "detailTexture", nl), nl);
+
+            if ((draftHasCliffs || draftCliffsFromJson) && draftCliffs != null)
+            {
+                string cliffIndent = GetFieldIndent(planetObject, "cliffs", nl);
+                planetObject = ReplaceJsonField(planetObject, "cliffs",
+                    SerializeCliffs(draftCliffs, cliffIndent, nl), cliffIndent, nl);
+            }
+
+            string overlayIndent = GetFieldIndent(planetObject, "overlays", nl);
+            planetObject = ReplaceJsonField(planetObject, "overlays",
+                SerializeOverlays(draftOverlays, overlayIndent, nl), overlayIndent, nl);
+
+            string updated = json.Substring(0, objectStart)
+                + planetObject
+                + json.Substring(objectEnd + 1);
+
+            File.WriteAllText(path, updated);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
+            LoadData();
+
+            if (regenerateAfterApply)
+                GeneratePreview(null);
+
+            SetStatus("Configuración de " + selectedPlanet + " guardada en StarSystems.json.", MessageType.Info);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
+            SetStatus("No se pudo guardar el JSON: " + exception.Message, MessageType.Error);
+        }
+    }
+
+    private static string GetStarSystemsPath()
+    {
+        TextAsset asset = Resources.Load<TextAsset>(OGGetAddress.files + "StarSystems");
+        string path = asset != null ? AssetDatabase.GetAssetPath(asset) : "";
+        return string.IsNullOrEmpty(path) ? "Assets/Resources/files/StarSystems.json" : path;
+    }
+
+    private static bool TryFindPlanetObject(string json, string planetName,
+        out int objectStart, out int objectEnd)
+    {
+        objectStart = -1;
+        objectEnd = -1;
+
+        List<int> objectStack = new List<int>();
+        int i = 0;
+
+        while (i < json.Length)
+        {
+            char c = json[i];
+
+            if (c == '"')
+            {
+                string token;
+                int end;
+                if (!ReadJsonString(json, i, out token, out end))
+                {
+                    i++;
+                    continue;
+                }
+
+                if (token == "Planet")
+                {
+                    int j = end + 1;
+                    while (j < json.Length && char.IsWhiteSpace(json[j]))
+                        j++;
+
+                    if (j < json.Length && json[j] == ':')
+                    {
+                        j++;
+                        while (j < json.Length && char.IsWhiteSpace(json[j]))
+                            j++;
+
+                        string value;
+                        int valueEnd;
+                        if (j < json.Length && json[j] == '"'
+                            && ReadJsonString(json, j, out value, out valueEnd)
+                            && string.Equals(value, planetName, StringComparison.Ordinal)
+                            && objectStack.Count > 0)
+                        {
+                            objectStart = objectStack[objectStack.Count - 1];
+                            objectEnd = FindMatchingBrace(json, objectStart);
+                            return objectEnd > objectStart;
+                        }
+                    }
+                }
+
+                i = end + 1;
+                continue;
+            }
+
+            if (c == '{')
+                objectStack.Add(i);
+            else if (c == '}' && objectStack.Count > 0)
+                objectStack.RemoveAt(objectStack.Count - 1);
+
+            i++;
+        }
+
+        return false;
+    }
+
+    private static int FindMatchingBrace(string text, int start)
+    {
+        int depth = 0;
+        bool inString = false;
+        bool escaped = false;
+
+        for (int i = start; i < text.Length; i++)
+        {
+            char c = text[i];
+
+            if (inString)
+            {
+                if (escaped)
+                    escaped = false;
+                else if (c == '\\')
+                    escaped = true;
+                else if (c == '"')
+                    inString = false;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (c == '{')
+            {
+                depth++;
+            }
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0)
+                    return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool ReadJsonString(string text, int quoteIndex,
+        out string value, out int endIndex)
+    {
+        value = "";
+        endIndex = quoteIndex;
+
+        if (quoteIndex < 0 || quoteIndex >= text.Length || text[quoteIndex] != '"')
+            return false;
+
+        StringBuilder builder = new StringBuilder();
+        int i = quoteIndex + 1;
+
+        while (i < text.Length)
+        {
+            char c = text[i];
+
+            if (c == '"')
+            {
+                value = builder.ToString();
+                endIndex = i;
+                return true;
+            }
+
+            if (c == '\\')
+            {
+                i++;
+                if (i >= text.Length)
+                    break;
+
+                char escape = text[i];
+                switch (escape)
+                {
+                    case '"': builder.Append('"'); break;
+                    case '\\': builder.Append('\\'); break;
+                    case '/': builder.Append('/'); break;
+                    case 'b': builder.Append('\b'); break;
+                    case 'f': builder.Append('\f'); break;
+                    case 'n': builder.Append('\n'); break;
+                    case 'r': builder.Append('\r'); break;
+                    case 't': builder.Append('\t'); break;
+                    case 'u':
+                        if (i + 4 < text.Length)
+                        {
+                            string hex = text.Substring(i + 1, 4);
+                            int code;
+                            if (int.TryParse(hex, NumberStyles.HexNumber,
+                                    CultureInfo.InvariantCulture, out code))
+                            {
+                                builder.Append((char)code);
+                                i += 4;
+                            }
+                            else
+                            {
+                                builder.Append(escape);
+                            }
+                        }
+                        else
+                        {
+                            builder.Append(escape);
+                        }
+                        break;
+                    default: builder.Append(escape); break;
+                }
+
+                i++;
+                continue;
+            }
+
+            builder.Append(c);
+            i++;
+        }
+
+        return false;
+    }
+
+    private static bool TryFindTopLevelFieldValue(string planetObject, string fieldName,
+        out int valueStart, out int valueEnd)
+    {
+        valueStart = -1;
+        valueEnd = -1;
+
+        int depth = 0;
+        int i = 0;
+
+        while (i < planetObject.Length)
+        {
+            char c = planetObject[i];
+
+            if (c == '"')
+            {
+                string token;
+                int end;
+                if (!ReadJsonString(planetObject, i, out token, out end))
+                {
+                    i++;
+                    continue;
+                }
+
+                if (depth == 1 && string.Equals(token, fieldName, StringComparison.Ordinal))
+                {
+                    int j = end + 1;
+                    while (j < planetObject.Length && char.IsWhiteSpace(planetObject[j]))
+                        j++;
+
+                    if (j < planetObject.Length && planetObject[j] == ':')
+                    {
+                        j++;
+                        while (j < planetObject.Length && char.IsWhiteSpace(planetObject[j]))
+                            j++;
+
+                        valueStart = j;
+                        valueEnd = FindValueEnd(planetObject, j);
+                        return valueEnd > valueStart;
+                    }
+                }
+
+                i = end + 1;
+                continue;
+            }
+
+            if (c == '{')
+                depth++;
+            else if (c == '}')
+                depth--;
+
+            i++;
+        }
+
+        return false;
+    }
+
+    private static int FindValueEnd(string text, int start)
+    {
+        if (start >= text.Length)
+            return -1;
+
+        char first = text[start];
+        int i = start;
+
+        if (first == '"')
+        {
+            string value;
+            int end;
+            return ReadJsonString(text, start, out value, out end) ? end + 1 : -1;
+        }
+
+        if (first == '{' || first == '[')
+        {
+            int depth = 0;
+            bool inString = false;
+            bool escaped = false;
+
+            for (; i < text.Length; i++)
+            {
+                char c = text[i];
+
+                if (inString)
+                {
+                    if (escaped)
+                        escaped = false;
+                    else if (c == '\\')
+                        escaped = true;
+                    else if (c == '"')
+                        inString = false;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inString = true;
+                    continue;
+                }
+
+                if (c == '{' || c == '[')
+                {
+                    depth++;
+                }
+                else if (c == '}' || c == ']')
+                {
+                    depth--;
+                    if (depth == 0)
+                        return i + 1;
+                }
+            }
+
+            return -1;
+        }
+
+        while (i < text.Length && text[i] != ',' && text[i] != '}' && text[i] != ']')
+            i++;
+
+        while (i > start && char.IsWhiteSpace(text[i - 1]))
+            i--;
+
+        return i;
+    }
+
+    private static string GetLineIndent(string text, int index)
+    {
+        int start = index;
+        while (start > 0 && text[start - 1] != '\n' && text[start - 1] != '\r')
+            start--;
+
+        int end = start;
+        while (end < text.Length && (text[end] == ' ' || text[end] == '\t'))
+            end++;
+
+        return text.Substring(start, end - start);
+    }
+
+    private static string DetectFieldIndent(string planetObject)
+    {
+        int start = 0;
+        while (start < planetObject.Length && planetObject[start] != '\n' && planetObject[start] != '\r')
+            start++;
+
+        if (start < planetObject.Length)
+        {
+            if (planetObject[start] == '\r' && start + 1 < planetObject.Length
+                && planetObject[start + 1] == '\n')
+            {
+                start += 2;
+            }
+            else
+            {
+                start++;
+            }
+        }
+
+        int end = start;
+        while (end < planetObject.Length && (planetObject[end] == ' ' || planetObject[end] == '\t'))
+            end++;
+
+        return end > start ? planetObject.Substring(start, end - start) : "    ";
+    }
+
+    private static string GetFieldIndent(string planetObject, string fieldName, string nl)
+    {
+        int valueStart;
+        int valueEnd;
+        return TryFindTopLevelFieldValue(planetObject, fieldName, out valueStart, out valueEnd)
+            ? GetLineIndent(planetObject, valueStart)
+            : DetectFieldIndent(planetObject);
+    }
+
+    private static string ReplaceJsonField(string planetObject, string fieldName,
+        string valueJson, string indent, string nl)
+    {
+        int valueStart;
+        int valueEnd;
+
+        if (TryFindTopLevelFieldValue(planetObject, fieldName, out valueStart, out valueEnd))
+        {
+            return planetObject.Substring(0, valueStart)
+                + valueJson
+                + planetObject.Substring(valueEnd);
+        }
+
+        int close = planetObject.LastIndexOf('}');
+        if (close < 0)
+            return planetObject;
+
+        int insertAt = close;
+        while (insertAt > 0 && char.IsWhiteSpace(planetObject[insertAt - 1]))
+            insertAt--;
+
+        string comma = insertAt > 1
+            && planetObject[insertAt - 1] != '{'
+            && planetObject[insertAt - 1] != ','
+            ? ","
+            : "";
+
+        string addition = comma + nl + indent + "\"" + fieldName + "\": " + valueJson;
+        return planetObject.Substring(0, insertAt)
+            + addition
+            + planetObject.Substring(insertAt);
+    }
+
+    private static string JsonString(string value)
+    {
+        if (value == null)
+            return "\"\"";
+
+        StringBuilder builder = new StringBuilder("\"");
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '"': builder.Append("\\\""); break;
+                case '\\': builder.Append("\\\\"); break;
+                case '\b': builder.Append("\\b"); break;
+                case '\f': builder.Append("\\f"); break;
+                case '\n': builder.Append("\\n"); break;
+                case '\r': builder.Append("\\r"); break;
+                case '\t': builder.Append("\\t"); break;
+                default:
+                    if (c < 32)
+                        builder.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
+                    else
+                        builder.Append(c);
+                    break;
+            }
+        }
+
+        builder.Append('"');
+        return builder.ToString();
+    }
+
+    private static string Num(float value)
+    {
+        string text = value.ToString("R", CultureInfo.InvariantCulture);
+        if (text.IndexOf('.') < 0 && text.IndexOf('e') < 0 && text.IndexOf('E') < 0)
+            text += ".0";
+        return text;
+    }
+
+    private static string Bool(bool value)
+    {
+        return value ? "true" : "false";
+    }
+
+    private static void AppendField(StringBuilder builder, string indent,
+        string name, string value, bool comma, string nl)
+    {
+        builder.Append(indent).Append('"').Append(name).Append("\": ").Append(value);
+        if (comma)
+            builder.Append(',');
+        builder.Append(nl);
+    }
+
+    private static string SerializeCliffs(CliffSettings cliffs, string indent, string nl)
+    {
+        StringBuilder builder = new StringBuilder();
+        string fieldIndent = indent + "  ";
+
+        builder.Append('{').Append(nl);
+        AppendField(builder, fieldIndent, "enabled", Bool(cliffs.enabled), true, nl);
+        AppendField(builder, fieldIndent, "mesaHeight", Num(cliffs.mesaHeight), true, nl);
+        AppendField(builder, fieldIndent, "mesaRoughness", Num(cliffs.mesaRoughness), true, nl);
+        AppendField(builder, fieldIndent, "edgeWidth", Num(cliffs.edgeWidth), true, nl);
+        AppendField(builder, fieldIndent, "canyonDepth", Num(cliffs.canyonDepth), true, nl);
+        AppendField(builder, fieldIndent, "canyonWidth", Num(cliffs.canyonWidth), true, nl);
+        AppendField(builder, fieldIndent, "strength", Num(cliffs.strength), true, nl);
+        AppendField(builder, fieldIndent, "coverage", Num(cliffs.coverage), true, nl);
+        AppendField(builder, fieldIndent, "regionFrequency", Num(cliffs.regionFrequency), true, nl);
+        AppendField(builder, fieldIndent, "regionFeather", Num(cliffs.regionFeather), true, nl);
+        AppendField(builder, fieldIndent, "maskThreshold", Num(cliffs.maskThreshold), true, nl);
+        AppendField(builder, fieldIndent, "maskFrequency", Num(cliffs.maskFrequency), true, nl);
+        AppendField(builder, fieldIndent, "slopeStart", Num(cliffs.slopeStart), true, nl);
+        AppendField(builder, fieldIndent, "slopeSoftness", Num(cliffs.slopeSoftness), true, nl);
+        AppendField(builder, fieldIndent, "textureType", JsonString(cliffs.textureType), true, nl);
+        AppendField(builder, fieldIndent, "verticesPerSide",
+            cliffs.verticesPerSide.ToString(CultureInfo.InvariantCulture), true, nl);
+        AppendField(builder, fieldIndent, "outerVerticesPerSide",
+            cliffs.outerVerticesPerSide.ToString(CultureInfo.InvariantCulture), true, nl);
+        AppendField(builder, fieldIndent, "highDetailRadiusKm", Num(cliffs.highDetailRadiusKm), false, nl);
+        builder.Append(indent).Append('}');
+
+        return builder.ToString();
+    }
+
+    private static string SerializeOverlays(TerrainOverlay[] overlays, string indent, string nl)
+    {
+        if (overlays == null || overlays.Length == 0)
+            return "[]";
+
+        StringBuilder builder = new StringBuilder();
+        string itemIndent = indent + "  ";
+        string fieldIndent = itemIndent + "  ";
+
+        builder.Append('[').Append(nl);
+
+        for (int i = 0; i < overlays.Length; i++)
+        {
+            TerrainOverlay overlay = overlays[i];
+            if (overlay == null)
+                continue;
+
+            builder.Append(itemIndent).Append('{').Append(nl);
+            AppendField(builder, fieldIndent, "enabled", Bool(overlay.enabled), true, nl);
+            AppendField(builder, fieldIndent, "label", JsonString(overlay.label), true, nl);
+            AppendField(builder, fieldIndent, "texture", JsonString(overlay.texture), true, nl);
+            AppendField(builder, fieldIndent, "mode", JsonString(overlay.mode), true, nl);
+            AppendField(builder, fieldIndent, "tiling", Num(overlay.tiling), true, nl);
+            AppendField(builder, fieldIndent, "strength", Num(overlay.strength), true, nl);
+            AppendField(builder, fieldIndent, "fadeDistance", Num(overlay.fadeDistance), true, nl);
+            AppendField(builder, fieldIndent, "normalStrength", Num(overlay.normalStrength), true, nl);
+            AppendField(builder, fieldIndent, "aoStrength", Num(overlay.aoStrength), true, nl);
+            AppendField(builder, fieldIndent, "width", Num(overlay.width), true, nl);
+            AppendField(builder, fieldIndent, "feather", Num(overlay.feather), true, nl);
+            AppendField(builder, fieldIndent, "wanderAmplitude", Num(overlay.wanderAmplitude), true, nl);
+            AppendField(builder, fieldIndent, "wanderFrequency", Num(overlay.wanderFrequency), true, nl);
+            AppendField(builder, fieldIndent, "angle", Num(overlay.angle), true, nl);
+            AppendField(builder, fieldIndent, "offset", Num(overlay.offset), true, nl);
+            AppendField(builder, fieldIndent, "noiseScale", Num(overlay.noiseScale), true, nl);
+            AppendField(builder, fieldIndent, "threshold", Num(overlay.threshold), true, nl);
+            AppendField(builder, fieldIndent, "patchFeather", Num(overlay.patchFeather), true, nl);
+            AppendField(builder, fieldIndent, "seedOffset", Num(overlay.seedOffset), true, nl);
+            AppendField(builder, fieldIndent, "connectPois", Bool(overlay.connectPois), false, nl);
+            builder.Append(itemIndent).Append('}');
+            if (i < overlays.Length - 1)
+                builder.Append(',');
+            builder.Append(nl);
+        }
+
+        builder.Append(indent).Append(']');
+        return builder.ToString();
     }
 
     private void SetStatus(string message, MessageType type)

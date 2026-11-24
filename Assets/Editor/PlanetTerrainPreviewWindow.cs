@@ -30,6 +30,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     [SerializeField] private bool showOverlays = true;
     [SerializeField] private bool showDetail = true;
     [SerializeField] private bool regenerateAfterApply = true;
+    [SerializeField] private Vector2 panelScroll = Vector2.zero;
 
     // Editable copy of the selected planet. The preview uses these values;
     // "Aplicar a JSON" writes them back to StarSystems.json.
@@ -164,6 +165,13 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     {
         SyncDraftIfNeeded();
 
+        panelScroll = EditorGUILayout.BeginScrollView(
+            panelScroll, false, true,
+            GUI.skin.horizontalScrollbar,
+            GUI.skin.verticalScrollbar,
+            GUI.skin.scrollView,
+            GUILayout.ExpandHeight(true), GUILayout.ExpandWidth(true));
+
         EditorGUILayout.LabelField("Planet Terrain Preview", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
             "Edita los parámetros del planeta, genera la vista previa sin Play Mode y pulsa " +
@@ -254,6 +262,8 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
         EditorGUILayout.Space(6f);
         EditorGUILayout.HelpBox(statusMessage, statusType);
+
+        EditorGUILayout.EndScrollView();
     }
 
     private void DrawGeneralConfig()

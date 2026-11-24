@@ -87,9 +87,13 @@ Shader "Custom/VegetationInstanced"
                 float bend = height01 * height01;
                 float2 windDir = _WindDirection.xz;
                 windDir /= max(0.0001, length(windDir));
+                float instanceOffset = 0.0;
+                #if defined(UNITY_VERTEX_INPUT_INSTANCE_ID)
+                    instanceOffset = (float)(unity_InstanceID % 97) * 0.7;
+                #endif
                 float phase = _Time.y * _WindSpeed
                     + dot(worldPos.xz, windDir) * _WindFrequency
-                    + (float)(unity_InstanceID % 97) * 0.7;
+                    + instanceOffset;
                 float sway = sin(phase) * _WindStrength;
                 float flutter = sin(phase * 2.7 + 1.3) * _WindStrength * 0.35;
                 worldPos.xz += windDir * (sway + flutter) * bend;

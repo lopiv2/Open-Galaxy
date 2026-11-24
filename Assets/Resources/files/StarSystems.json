@@ -29237,7 +29237,8 @@
           "threshold": 0.5,
           "patchFeather": 0.12,
           "seedOffset": 11.0,
-          "connectPois": false
+          "connectPois": false,
+          "footstepClip": "sand_footstep"
         },
         {
           "enabled": true,
@@ -29259,7 +29260,8 @@
           "threshold": 0.5,
           "patchFeather": 0.12,
           "seedOffset": 37.0,
-          "connectPois": false
+          "connectPois": false,
+          "footstepClip": "sand_footstep"
         },
         {
           "enabled": true,
@@ -29281,7 +29283,38 @@
           "threshold": 0.5,
           "patchFeather": 0.12,
           "seedOffset": 91.0,
-          "connectPois": false
+          "connectPois": false,
+          "footstepClip": "sand_footstep"
+        }
+      ],
+      "footsteps": [
+        {
+          "texture": "dune",
+          "clip": "sand_footstep",
+          "volume": 0.6,
+          "pitchMin": 0.92,
+          "pitchMax": 1.08
+        },
+        {
+          "texture": "coast_sand_01",
+          "clip": "sand_footstep",
+          "volume": 0.6,
+          "pitchMin": 0.9,
+          "pitchMax": 1.1
+        },
+        {
+          "texture": "sand_path",
+          "clip": "sand_footstep",
+          "volume": 0.55,
+          "pitchMin": 0.92,
+          "pitchMax": 1.08
+        },
+        {
+          "texture": "default",
+          "clip": "sand_footstep",
+          "volume": 0.5,
+          "pitchMin": 0.92,
+          "pitchMax": 1.08
         }
       ],
       "vegetation": [
@@ -29292,8 +29325,8 @@
           "prefab": "DeadBush_VarA",
           "material": "shrub_dead",
           "countPerTile": 120,
-          "minScale": 4.0,
-          "maxScale": 6.0,
+          "minScale": 10.0,
+          "maxScale": 15.0,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,
@@ -29309,8 +29342,8 @@
           "prefab": "DeadBush_VarB",
           "material": "shrub_dead",
           "countPerTile": 120,
-          "minScale": 4.0,
-          "maxScale": 5.8,
+          "minScale": 10.0,
+          "maxScale": 14.5,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,
@@ -29326,8 +29359,8 @@
           "prefab": "DeadBush_VarC",
           "material": "shrub_dead",
           "countPerTile": 100,
-          "minScale": 3.4,
-          "maxScale": 5.0,
+          "minScale": 8.5,
+          "maxScale": 12.5,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,
@@ -29343,8 +29376,8 @@
           "prefab": "DeadBush_VarD",
           "material": "shrub_dead",
           "countPerTile": 120,
-          "minScale": 4.0,
-          "maxScale": 6.0,
+          "minScale": 10.0,
+          "maxScale": 15.0,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,
@@ -29360,8 +29393,8 @@
           "prefab": "DeadBush_VarE",
           "material": "shrub_dead",
           "countPerTile": 110,
-          "minScale": 3.4,
-          "maxScale": 5.2,
+          "minScale": 8.5,
+          "maxScale": 13.0,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,
@@ -29377,8 +29410,8 @@
           "prefab": "DeadBush_VarF",
           "material": "shrub_dead",
           "countPerTile": 110,
-          "minScale": 3.4,
-          "maxScale": 5.2,
+          "minScale": 8.5,
+          "maxScale": 13.0,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,
@@ -29394,8 +29427,8 @@
           "prefab": "DeadBush_VarG",
           "material": "shrub_dead",
           "countPerTile": 90,
-          "minScale": 3.0,
-          "maxScale": 4.4,
+          "minScale": 7.5,
+          "maxScale": 11.0,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,
@@ -29411,8 +29444,8 @@
           "prefab": "DeadBush_VarH",
           "material": "shrub_dead",
           "countPerTile": 100,
-          "minScale": 3.2,
-          "maxScale": 4.8,
+          "minScale": 8.0,
+          "maxScale": 12.0,
           "maxSlope": 30.0,
           "maxDistance": 900.0,
           "placementAttempts": 6,

@@ -12,7 +12,7 @@ public class GroundCharacterController : MonoBehaviour
     public string readyroomResource = "objects/readyrooms/readyroom_white";
     public string characterChildName = "rebel_pilot";
     public float spawnDistanceFromShip = 8f;
-    public float groundOffset = 0.05f;
+    public float groundOffset = 0.0f;
 
     [Header("Movement")]
     public float walkSpeed = 3.5f;
@@ -36,6 +36,8 @@ public class GroundCharacterController : MonoBehaviour
     private SoftLanding disabledLanding;
     private OGCamera disabledOGCamera;
     private AudioSource mutedEngine;
+    private GroundFootprints footprints;
+    private CharacterController body;
     private float engineVolumeBefore;
     private Vector3 cameraLocalPosition;
     private Quaternion cameraLocalRotation;
@@ -224,6 +226,26 @@ public class GroundCharacterController : MonoBehaviour
         character.SetActive(true);
 
         animator = character.GetComponent<Animator>();
+        body = character.GetComponent<CharacterController>();
+        if (body == null)
+        {
+            body = character.AddComponent<CharacterController>();
+        }
+        // Capsule from the soles (origin) up: ~1.8 m tall, 0.3 m radius.
+        body.height = 1.8f;
+        body.radius = 0.3f;
+        body.center = new Vector3(0f, 0.9f, 0f);
+        body.slopeLimit = 45f;
+        body.stepOffset = 0.35f;
+        body.skinWidth = 0.08f;
+        body.minMoveDistance = 0f;
+        body.enabled = true;
+        footprints = character.GetComponent<GroundFootprints>();
+        if (footprints == null)
+        {
+            footprints = character.AddComponent<GroundFootprints>();
+        }
+        footprints.ResetTracking(character.transform.position);
         cameraYaw = scene.mainShip.transform.eulerAngles.y;
         cameraPitch = 12f;
         cameraSnap = true;
@@ -310,6 +332,8 @@ public class GroundCharacterController : MonoBehaviour
 
         character = null;
         animator = null;
+        footprints = null;
+        body = null;
 
         // Put the camera back where OGCamera left it before re-enabling it.
         if (cameraTransform != null)
@@ -445,12 +469,24 @@ public class GroundCharacterController : MonoBehaviour
         float input = Mathf.Clamp01(localMove.magnitude);
         bool running = keyboard.leftShiftKey.isPressed == true || keyboard.rightShiftKey.isPressed == true;
 
-        if (input > 0.01f)
+        bool isMoving = input > 0.01f;
+        Vector3 moveForward = character.transform.forward;
+
+        if (isMoving)
         {
             Vector3 worldMove = Quaternion.Euler(0f, cameraYaw, 0f) * localMove.normalized;
             float speed = running == true ? runSpeed : walkSpeed;
 
-            character.transform.position += worldMove * speed * Time.deltaTime;
+            if (body != null && body.enabled)
+            {
+                // Collides with props/rocks/ships; terrain stickiness is
+                // still handled by StickToGround right after.
+                body.Move(worldMove * speed * Time.deltaTime);
+            }
+            else
+            {
+                character.transform.position += worldMove * speed * Time.deltaTime;
+            }
 
             float targetYaw = Mathf.Atan2(worldMove.x, worldMove.z) * Mathf.Rad2Deg;
             Quaternion targetRotation = Quaternion.Euler(0f, targetYaw, 0f);
@@ -460,12 +496,18 @@ public class GroundCharacterController : MonoBehaviour
                 rotationSpeed * 100f * Time.deltaTime);
 
             StickToGround();
+            moveForward = worldMove;
         }
 
         if (animator != null)
         {
             animator.SetFloat("Speed", input, 0.15f, Time.deltaTime);
-            animator.SetBool("IsRunning", running == true && input > 0.01f);
+            animator.SetBool("IsRunning", running == true && isMoving);
+        }
+
+        if (footprints != null)
+        {
+            footprints.NotifyMove(character.transform.position, moveForward, isMoving, running);
         }
     }
 

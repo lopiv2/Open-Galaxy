@@ -32,6 +32,11 @@ public class StarSystem
     // Optional per-planet vegetation (trees, bushes, dry shrubs...). Each entry
     // is instantiated per terrain tile around the ship by TerrainStreamer.
     public VegetationSettings[] vegetation;
+    // Optional per-planet footstep surfaces (sand, rock, metal...). Each entry
+    // maps a ground/overlay texture keyword to an audioclip in
+    // Resources/audio/audioclips. First keyword match wins; an entry with an
+    // empty/default texture acts as fallback when nothing else matches.
+    public FootstepSurface[] footsteps;
     // Optional per-planet cloud roof override (StarSystems.json). Zero/empty
     // means "use the PlanetTypes.json climate defaults for planetType".
     public float cloudCoverage;
@@ -135,6 +140,24 @@ public class TerrainOverlay
     public float seedOffset = 0f;
     // If true, waypoints come from PlanetPOIs.json instead of a free trail.
     public bool connectPois = false;
+    // Optional footstep audioclip for this overlay surface (name in
+    // Resources/audio/audioclips, without extension). Path overlays win over
+    // the base terrain texture when the foot is on/near their segments.
+    public string footstepClip;
+}
+
+// Per-planet footstep surface entry ("footsteps" array in StarSystems.json).
+// "texture" is a keyword matched (contains, case-insensitive) against the
+// tile ground/overlay texture name. "clip" is the audioclip name in
+// Resources/audio/audioclips. An empty/"default" texture is the fallback.
+[System.Serializable]
+public class FootstepSurface
+{
+    public string texture;
+    public string clip;
+    public float volume = 0.6f;
+    public float pitchMin = 0.92f;
+    public float pitchMax = 1.08f;
 }
 
 [System.Serializable]

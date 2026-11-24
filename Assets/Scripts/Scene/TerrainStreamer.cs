@@ -77,6 +77,9 @@ public class TerrainStreamer : MonoBehaviour
     public TerrainOverlay[] overlayConfig;
     [Tooltip("Planet name, used to connect path overlays to PlanetPOIs.json.")]
     public string planetName;
+    [Header("Footsteps")]
+    [Tooltip("Per-planet footstep surfaces from StarSystems.json (texture keyword -> audioclip).")]
+    public FootstepSurface[] footstepConfig;
     private const int MaxOverlaySlots = 3;
     private const int MaxPathSegments = 16;
 
@@ -93,6 +96,7 @@ public class TerrainStreamer : MonoBehaviour
         public Vector4 pE;
         public readonly Vector4[] segments = new Vector4[MaxPathSegments];
         public int segmentCount;
+        public string footstepClip;
     }
 
     // Precomputed road cost for the rectangle a leg may wander through.
@@ -631,7 +635,8 @@ public class TerrainStreamer : MonoBehaviour
                 active = true,
                 albedo = albedo,
                 normal = Resources.Load<Texture2D>("objects/terrain/textures/" + baseName + "_n"),
-                occlusion = Resources.Load<Texture2D>("objects/terrain/textures/" + baseName + "_ao")
+                occlusion = Resources.Load<Texture2D>("objects/terrain/textures/" + baseName + "_ao"),
+                footstepClip = config.footstepClip
             };
 
             int mode = OverlayModeToInt(config.mode);
@@ -725,6 +730,191 @@ public class TerrainStreamer : MonoBehaviour
                 return 3;
             default:
                 return 0;
+        }
+    }
+
+    // Footstep surface query for the on-foot character. Priority:
+    // 1) path/poiPath overlay with a footstepClip when the foot is on/near
+    //    its segments, 2) base tile texture keyword match in footstepConfig,
+    // 3) default/empty-texture fallback entry. Supports planets with several
+    // ground textures: each tile resolves its own _GroundMap.
+    public bool TryGetFootstep(Vector3 worldPosition, out string clipName, out float volume, out float pitchMin, out float pitchMax)
+    {
+        clipName = null;
+        volume = 0.6f;
+        pitchMin = 0.92f;
+        pitchMax = 1.08f;
+
+        // Base ground texture under the foot (per-tile material instance).
+        string groundTexture = GetTileGroundTextureName(worldPosition);
+
+        // Overlay paths first: they win when the foot is inside their width.
+        string overlayClip = GetOverlayFootstepClip(worldPosition);
+        if (string.IsNullOrEmpty(overlayClip) == false)
+        {
+            clipName = overlayClip;
+            ApplyFootstepTuning(clipName, ref volume, ref pitchMin, ref pitchMax);
+            return true;
+        }
+
+        if (footstepConfig == null || footstepConfig.Length == 0)
+        {
+            return false;
+        }
+
+        string groundLower = (groundTexture ?? string.Empty).ToLowerInvariant();
+
+        // Exact/keyword matches first (in JSON order).
+        foreach (FootstepSurface surface in footstepConfig)
+        {
+            if (surface == null || string.IsNullOrEmpty(surface.clip))
+            {
+                continue;
+            }
+
+            string key = (surface.texture ?? string.Empty).Trim().ToLowerInvariant();
+            if (key.Length == 0 || key == "default" || key == "any" || key == "*")
+            {
+                continue;
+            }
+
+            if (groundLower.Length > 0 && groundLower.Contains(key))
+            {
+                clipName = surface.clip;
+                volume = surface.volume > 0f ? surface.volume : volume;
+                pitchMin = surface.pitchMin;
+                pitchMax = surface.pitchMax;
+                return true;
+            }
+        }
+
+        // Fallback entry (empty/default texture) or first entry.
+        foreach (FootstepSurface surface in footstepConfig)
+        {
+            if (surface == null || string.IsNullOrEmpty(surface.clip))
+            {
+                continue;
+            }
+
+            string key = (surface.texture ?? string.Empty).Trim().ToLowerInvariant();
+            if (key.Length == 0 || key == "default" || key == "any" || key == "*")
+            {
+                clipName = surface.clip;
+                volume = surface.volume > 0f ? surface.volume : volume;
+                pitchMin = surface.pitchMin;
+                pitchMax = surface.pitchMax;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private string GetTileGroundTextureName(Vector3 worldPosition)
+    {
+        Vector3 origin = new Vector3(worldPosition.x, worldPosition.y + 400f, worldPosition.z);
+        RaycastHit[] hits = Physics.RaycastAll(origin, Vector3.down, origin.y + 2000f, ~0, QueryTriggerInteraction.Ignore);
+        float best = float.NegativeInfinity;
+        string textureName = null;
+
+        foreach (RaycastHit hit in hits)
+        {
+            if (hit.transform == null || hit.transform.name.StartsWith("Tile_") == false)
+            {
+                continue;
+            }
+
+            if (hit.point.y <= best)
+            {
+                continue;
+            }
+
+            best = hit.point.y;
+            MeshRenderer renderer = hit.transform.GetComponent<MeshRenderer>();
+            if (renderer != null && renderer.sharedMaterial != null)
+            {
+                Texture ground = renderer.sharedMaterial.GetTexture("_GroundMap");
+                if (ground != null)
+                {
+                    textureName = ground.name;
+                }
+            }
+        }
+
+        return textureName;
+    }
+
+    private string GetOverlayFootstepClip(Vector3 worldPosition)
+    {
+        if (overlays == null || tileParent == null)
+        {
+            return null;
+        }
+
+        Vector3 local = tileParent.InverseTransformPoint(worldPosition);
+        Vector2 p = new Vector2(local.x, local.z);
+
+        for (int i = 0; i < overlays.Length; i++)
+        {
+            OverlayRuntime runtime = overlays[i];
+            if (runtime == null || runtime.active == false || string.IsNullOrEmpty(runtime.footstepClip))
+            {
+                continue;
+            }
+
+            int mode = (int)runtime.pA.w;
+            if (mode != 2 && mode != 3)
+            {
+                continue;
+            }
+
+            float halfWidth = Mathf.Max(0.5f, runtime.pB.x * 0.5f + runtime.pB.y * 0.5f);
+            float halfWidthSqr = halfWidth * halfWidth;
+
+            for (int s = 0; s < runtime.segmentCount; s++)
+            {
+                Vector4 seg = runtime.segments[s];
+                Vector2 a = new Vector2(seg.x, seg.y);
+                Vector2 b = new Vector2(seg.z, seg.w);
+                if (DistancePointToSegmentSqr(p, a, b) <= halfWidthSqr)
+                {
+                    return runtime.footstepClip;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static float DistancePointToSegmentSqr(Vector2 p, Vector2 a, Vector2 b)
+    {
+        Vector2 ab = b - a;
+        float denom = ab.sqrMagnitude;
+        if (denom < 0.0001f)
+        {
+            return (p - a).sqrMagnitude;
+        }
+
+        float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / denom);
+        return (p - (a + ab * t)).sqrMagnitude;
+    }
+
+    private void ApplyFootstepTuning(string clipName, ref float volume, ref float pitchMin, ref float pitchMax)
+    {
+        if (footstepConfig == null)
+        {
+            return;
+        }
+
+        foreach (FootstepSurface surface in footstepConfig)
+        {
+            if (surface != null && string.Equals(surface.clip, clipName, System.StringComparison.OrdinalIgnoreCase))
+            {
+                volume = surface.volume > 0f ? surface.volume : volume;
+                pitchMin = surface.pitchMin;
+                pitchMax = surface.pitchMax;
+                return;
+            }
         }
     }
 

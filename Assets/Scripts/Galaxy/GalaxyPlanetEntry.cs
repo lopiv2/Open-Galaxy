@@ -505,6 +505,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
         // Per-planet overlays (cliff-foot sand, paths, city patches...).
         // Missing block leaves the terrain exactly as before.
         streamer.overlayConfig = system != null ? system.overlays : null;
+
+        // Per-planet vegetation (trees, bushes, dry shrubs...). Missing block
+        // means the planet has no instanced vegetation at all.
+        streamer.vegetationConfig = system != null ? system.vegetation : null;
     }
 
     private void UpdateOnPlanet()

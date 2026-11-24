@@ -29201,8 +29201,8 @@
         "mesaHeight": 60.0,
         "mesaRoughness": 25.0,
         "edgeWidth": 0.02,
-        "canyonDepth": 55.0,
-        "canyonWidth": 0.06,
+        "canyonDepth": 35.0,
+        "canyonWidth": 0.05,
         "strength": 1.0,
         "coverage": 0.5,
         "regionFrequency": 0.00012,
@@ -29211,13 +29211,14 @@
         "maskFrequency": 0.00045,
         "slopeStart": 0.72,
         "slopeSoftness": 0.15,
-        "textureType": "cliff",
-        "verticesPerSide": 48,
+        "textureType": "cliff01",
+        "verticesPerSide": 80,
         "outerVerticesPerSide": 32,
-        "highDetailRadiusKm": 5
+        "highDetailRadiusKm": 5.0
       },
       "overlays": [
         {
+          "enabled": true,
           "label": "Coast sand at cliff feet",
           "texture": "coast_sand_01",
           "mode": "cliffFoot",
@@ -29226,15 +29227,25 @@
           "fadeDistance": 0.0,
           "normalStrength": 0.55,
           "aoStrength": 0.5,
+          "width": 3.0,
+          "feather": 4.0,
+          "wanderAmplitude": 10.0,
+          "wanderFrequency": 0.002,
+          "angle": 0.0,
+          "offset": 0.0,
           "noiseScale": 0.004,
-          "seedOffset": 11.0
+          "threshold": 0.5,
+          "patchFeather": 0.12,
+          "seedOffset": 11.0,
+          "connectPois": false
         },
         {
+          "enabled": true,
           "label": "Cliff-following road to MOS EISLEY",
           "texture": "sand_path",
           "mode": "poiPath",
           "tiling": 0.05,
-          "strength": 0.9,
+          "strength": 0.7,
           "fadeDistance": 0.0,
           "normalStrength": 0.0,
           "aoStrength": 0.0,
@@ -29245,9 +29256,13 @@
           "angle": 0.0,
           "offset": 0.0,
           "noiseScale": 0.0015,
-          "seedOffset": 37.0
+          "threshold": 0.5,
+          "patchFeather": 0.12,
+          "seedOffset": 37.0,
+          "connectPois": false
         },
         {
+          "enabled": true,
           "label": "Cliff-following sand trail",
           "texture": "sand_path",
           "mode": "path",
@@ -29263,7 +29278,29 @@
           "angle": 104.0,
           "offset": 0.0,
           "noiseScale": 0.0018,
-          "seedOffset": 91.0
+          "threshold": 0.5,
+          "patchFeather": 0.12,
+          "seedOffset": 91.0,
+          "connectPois": false
+        }
+      ],
+      "vegetation": [
+        {
+          "enabled": true,
+          "label": "Dead shrubs",
+          "folder": "objects/trees/",
+          "prefab": "DeadShrub_LOD2",
+          "material": "shrub_dead",
+          "countPerTile": 600,
+          "minScale": 1.8,
+          "maxScale": 3.2,
+          "maxSlope": 30.0,
+          "maxDistance": 900.0,
+          "placementAttempts": 6,
+          "windStrength": 0.05,
+          "windSpeed": 2.4,
+          "windFrequency": 0.18,
+          "seedOffset": 17
         }
       ],
       "cloudCoverage": 0.32,

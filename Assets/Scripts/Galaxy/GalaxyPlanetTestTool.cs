@@ -47,17 +47,87 @@ public static class GalaxyPlanetTestTool
 
             while (elapsed < timeout)
             {
+                // RunGalaxyMode is a coroutine and may be interrupted (domain
+                // reload, menu double-click, lost focus). Repair the minimum
+                // state needed for a planet entry instead of just timing out.
                 MissionManager missionManager = FindFirstObjectByType<MissionManager>();
-                GalaxyPlanetEntry entry = GalaxyPlanetEntry.Instance;
-                Scene scene = SceneFunctions.GetScene();
 
-                if (missionManager != null && missionManager.running == true
+                if (missionManager == null)
+                {
+                    GameObject managerObject = new GameObject("MissionManager");
+                    missionManager = managerObject.AddComponent<MissionManager>();
+                    managerObject.AddComponent<GalaxyMapController>();
+                    managerObject.AddComponent<GalaxyPlanetEntry>();
+                    missionManager.missionName = "Planet Test - " + TestPlanet;
+                    missionManager.missionAddress = OGGetAddress.missions_internal;
+                    missionManager.missionData = "{\"missionEventData\":[]}";
+                    missionManager.audioLoaded = true;
+                    missionManager.running = false;
+                }
+
+                if (UnityEngine.Object.FindAnyObjectByType<Audio>() == null)
+                    AudioFunctions.CreateAudioManager();
+
+                GalaxyPlanetEntry entry = GalaxyPlanetEntry.Instance;
+                if (entry == null)
+                {
+                    entry = missionManager.gameObject.GetComponent<GalaxyPlanetEntry>();
+                    if (entry == null)
+                        entry = missionManager.gameObject.AddComponent<GalaxyPlanetEntry>();
+                }
+
+                Scene scene = SceneFunctions.GetScene();
+                if (scene == null)
+                    scene = SceneFunctions.CreateScene();
+
+                if (scene.shipsPrefabPool == null || scene.shipsPrefabPool.Length == 0)
+                    SceneFunctions.LoadScenePrefabs();
+
+                if (string.IsNullOrEmpty(scene.currentLocation))
+                {
+                    scene.currentLocation = TestPlanet;
+                    scene.availibleLocations = new System.Collections.Generic.List<string> { TestPlanet };
+                }
+
+                if (scene.mainShip == null)
+                {
+                    SceneFunctions.LoadSingleShip(
+                        new Vector3(0, 0, -200), Quaternion.identity,
+                        TestShip, "player01",
+                        GalaxyModeFunctions.GetAllegianceForShip(TestShip),
+                        "no cargo", false, false, false, "red", true);
+                }
+
+                // ForceEnterForTest needs an active planet to descend into.
+                GameObject activePlanet;
+                Vector3 planetCenter;
+                float planetRadius;
+                if (!GalaxyPlanetEntry.GetActivePlanet(scene, out activePlanet,
+                        out planetCenter, out planetRadius))
+                {
+                    string planetPrefab =
+                        GalaxyModeFunctions.GetPlanetPrefabForSystemPublic(TestPlanet);
+                    if (!string.IsNullOrEmpty(planetPrefab))
+                    {
+                        SceneFunctions.GeneratePlanet(
+                            planetPrefab, "none", true,
+                            GalaxyModeFunctions.GetPlanetDistanceForSystem(TestPlanet),
+                            0, 0, 0, 0, 0, 0);
+                    }
+                }
+
+                missionManager.scene = scene;
+                missionManager.running = true;
+
+                if (missionManager.running == true
                     && entry != null && scene != null && scene.mainShip != null
                     && GalaxyPlanetEntry.IsTransitioning == false
                     && GalaxyPlanetEntry.IsOnPlanet == false)
                 {
                     entry.ForceEnterForTest();
-                    yield break;
+
+                    if (GalaxyPlanetEntry.IsTransitioning)
+                        yield break;
                 }
 
                 elapsed += Time.unscaledDeltaTime;

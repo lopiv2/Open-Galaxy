@@ -64,6 +64,14 @@ public class TerrainStreamer : MonoBehaviour
     public float detailAOStrength = 0.8f;
     public float detailFadeDistance = 350f;
 
+    [Header("Vegetation")]
+    [Tooltip("Per-planet vegetation entries from StarSystems.json (trees, bushes...).")]
+    public VegetationSettings[] vegetationConfig;
+    [Tooltip("Radius around the ship whose tiles receive vegetation. Smaller = cheaper.")]
+    public float vegetationRadiusInKilometres = 1.5f;
+    private VegetationPrototype[] vegetationPrototypes;
+    private int vegetationTileRadius;
+
     [Header("Terrain Overlays")]
     [Tooltip("Per-planet overlay layers from StarSystems.json. Max three slots.")]
     public TerrainOverlay[] overlayConfig;
@@ -265,6 +273,10 @@ public class TerrainStreamer : MonoBehaviour
         tileRadiusInTiles = Mathf.CeilToInt(
             tileRadiusInKilometres * 1000f / tileSize
         );
+
+        vegetationPrototypes = BuildVegetationPrototypes();
+        vegetationTileRadius = Mathf.Max(0,
+            Mathf.CeilToInt(vegetationRadiusInKilometres * 1000f / tileSize));
 
         outerTileRadiusInKilometres = Mathf.Max(outerTileRadiusInKilometres, tileRadiusInKilometres);
         outerTileRadiusInTiles = Mathf.CeilToInt(
@@ -1136,6 +1148,123 @@ public class TerrainStreamer : MonoBehaviour
         foreach (Vector2Int coordinate in tilesToUnload)
         {
             UnloadTile(coordinate);
+        }
+
+        RefreshVegetationForLoadedTiles();
+    }
+
+    private VegetationPrototype[] BuildVegetationPrototypes()
+    {
+        if (vegetationConfig == null || vegetationConfig.Length == 0)
+        {
+            return null;
+        }
+
+        List<VegetationPrototype> prototypes = new List<VegetationPrototype>();
+
+        foreach (VegetationSettings settings in vegetationConfig)
+        {
+            if (settings == null || settings.enabled == false || string.IsNullOrEmpty(settings.prefab))
+            {
+                continue;
+            }
+
+            string folder = string.IsNullOrEmpty(settings.folder) ? "objects/trees/" : settings.folder;
+            GameObject prefab = Resources.Load<GameObject>(folder + settings.prefab);
+
+            if (prefab == null)
+            {
+                Debug.LogWarning($"TerrainStreamer: vegetation prefab not found at Resources/{folder}{settings.prefab}");
+                continue;
+            }
+
+            MeshFilter filter = prefab.GetComponentInChildren<MeshFilter>(true);
+            MeshRenderer renderer = prefab.GetComponentInChildren<MeshRenderer>(true);
+
+            if (filter == null || filter.sharedMesh == null)
+            {
+                Debug.LogWarning($"TerrainStreamer: vegetation prefab '{settings.prefab}' has no mesh.");
+                continue;
+            }
+
+            Material source = renderer != null ? renderer.sharedMaterial : null;
+
+            if (string.IsNullOrEmpty(settings.material) == false)
+            {
+                Material overrideMaterial = Resources.Load<Material>(folder + settings.material);
+                if (overrideMaterial != null)
+                {
+                    source = overrideMaterial;
+                }
+                else
+                {
+                    Debug.LogWarning($"TerrainStreamer: vegetation material not found at Resources/{folder}{settings.material}");
+                }
+            }
+
+            if (source == null)
+            {
+                Debug.LogWarning($"TerrainStreamer: vegetation '{settings.prefab}' has no material.");
+                continue;
+            }
+
+            // Runtime instance: wind values can be tuned per planet without
+            // writing the values back into the shared material asset.
+            Material runtimeMaterial = new Material(source);
+            runtimeMaterial.enableInstancing = true;
+
+            if (runtimeMaterial.HasProperty("_WindStrength"))
+                runtimeMaterial.SetFloat("_WindStrength", settings.windStrength);
+            if (runtimeMaterial.HasProperty("_WindSpeed"))
+                runtimeMaterial.SetFloat("_WindSpeed", settings.windSpeed);
+            if (runtimeMaterial.HasProperty("_WindFrequency"))
+                runtimeMaterial.SetFloat("_WindFrequency", settings.windFrequency);
+            if (runtimeMaterial.HasProperty("_WindHeight"))
+                runtimeMaterial.SetFloat("_WindHeight", Mathf.Max(0.001f, filter.sharedMesh.bounds.size.y));
+
+            prototypes.Add(new VegetationPrototype
+            {
+                mesh = filter.sharedMesh,
+                material = runtimeMaterial,
+                settings = settings
+            });
+        }
+
+        return prototypes.ToArray();
+    }
+
+    // A tile loaded far away gets its vegetation when it later enters the
+    // vegetation radius (tiles are kept loaded out to the terrain radius).
+    private void RefreshVegetationForLoadedTiles()
+    {
+        if (vegetationPrototypes == null || vegetationPrototypes.Length == 0)
+        {
+            return;
+        }
+
+        foreach (KeyValuePair<Vector2Int, GameObject> loaded in loadedTiles)
+        {
+            GameObject tile = loaded.Value;
+            if (tile == null)
+            {
+                continue;
+            }
+
+            if (tile.GetComponents<TileVegetation>().Length >= vegetationPrototypes.Length)
+            {
+                continue;
+            }
+
+            Vector2Int delta = loaded.Key - currentShipTile;
+            if (Mathf.Abs(delta.x) > vegetationTileRadius || Mathf.Abs(delta.y) > vegetationTileRadius)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < vegetationPrototypes.Length; i++)
+            {
+                TileVegetation.Attach(tile, loaded.Key, tileSize, terrainGenerator, vegetationPrototypes[i], ship);
+            }
         }
     }
 

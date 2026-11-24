@@ -30,6 +30,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     [SerializeField] private int centerTileZ;
     [SerializeField] private bool showOverlays = true;
     [SerializeField] private bool showDetail = true;
+    [SerializeField] private bool showVegetation = true;
     [SerializeField] private bool regenerateAfterApply = true;
     [SerializeField] private bool liveUpdate = true;
     [SerializeField] private bool liveRefreshPending;
@@ -48,6 +49,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     [SerializeField] private bool draftCliffsFromJson;
     [SerializeField] private CliffSettings draftCliffs = new CliffSettings();
     [SerializeField] private TerrainOverlay[] draftOverlays = new TerrainOverlay[0];
+    [SerializeField] private VegetationSettings[] draftVegetation = new VegetationSettings[0];
 
     [SerializeField] private bool configFoldout = true;
     [SerializeField] private bool generalFoldout = true;
@@ -62,6 +64,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     private string[] allPlanets = new string[0];
     private string[] filteredPlanets = new string[0];
     private GameObject previewRoot;
+    private Transform previewVegetationViewer;
     private readonly List<Mesh> generatedMeshes = new List<Mesh>();
     private readonly List<Material> generatedMaterials = new List<Material>();
 
@@ -269,6 +272,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         centerTileZ = EditorGUILayout.IntField("Centro tile Z", centerTileZ);
         showOverlays = EditorGUILayout.Toggle("Overlays (caminos/arena)", showOverlays);
         showDetail = EditorGUILayout.Toggle("Detalle cercano", showDetail);
+        showVegetation = EditorGUILayout.Toggle("Vegetación (bloque vegetation)", showVegetation);
 
         EditorGUI.BeginChangeCheck();
         liveUpdate = EditorGUILayout.Toggle("Actualización en vivo", liveUpdate);
@@ -535,6 +539,36 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         // Road overlays need the configured generator before masks are sampled.
         Invoke(streamer, "LoadOverlays");
 
+        // Build the same mesh/material prototypes used by TerrainStreamer at
+        // runtime. Runtime materials are tracked so repeated previews don't leak.
+        VegetationPrototype[] vegetationPrototypes = null;
+        if (showVegetation && streamer.vegetationConfig != null
+            && streamer.vegetationConfig.Length > 0)
+        {
+            vegetationPrototypes = Invoke<VegetationPrototype[]>(
+                streamer, "BuildVegetationPrototypes");
+
+            if (vegetationPrototypes != null)
+            {
+                foreach (VegetationPrototype prototype in vegetationPrototypes)
+                {
+                    if (prototype != null && prototype.material != null)
+                        generatedMaterials.Add(prototype.material);
+                }
+            }
+        }
+
+        // Distance culling needs a viewer. In the editor there is no ship, so
+        // place a dummy one over the centre tile being previewed.
+        GameObject viewer = new GameObject("PreviewVegetationViewer");
+        viewer.transform.SetParent(previewRoot.transform);
+        viewer.transform.localPosition = new Vector3(
+            (centerTileX + 0.5f) * PreviewTileSize,
+            streamer.maxTerrainHeight,
+            (centerTileZ + 0.5f) * PreviewTileSize);
+        viewer.hideFlags = HideFlags.DontSaveInEditor | HideFlags.DontUnloadUnusedAsset;
+        previewVegetationViewer = viewer.transform;
+
         int startX = centerTileX - Mathf.FloorToInt(gridSize / 2f);
         int startZ = centerTileZ - Mathf.FloorToInt(gridSize / 2f);
         int generatedTiles = 0;
@@ -572,6 +606,17 @@ public class PlanetTerrainPreviewWindow : EditorWindow
                 Invoke(streamer, "SetTileCliffMaps", tileMaterial, coordinate);
 
                 renderer.sharedMaterial = tileMaterial;
+
+                if (vegetationPrototypes != null)
+                {
+                    foreach (VegetationPrototype prototype in vegetationPrototypes)
+                    {
+                        TileVegetation.Attach(
+                            tile, coordinate, PreviewTileSize,
+                            generator, prototype, previewVegetationViewer);
+                    }
+                }
+
                 generatedTiles++;
             }
         }
@@ -579,7 +624,8 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         FramePreview();
         SetStatus(
             "Generadas " + generatedTiles + " tiles de " + system.Planet
-            + " con " + verticesPerSide + " vértices/lado. " + DescribeOverlays(streamer),
+            + " con " + verticesPerSide + " vértices/lado. " + DescribeOverlays(streamer)
+            + " " + DescribeVegetation(vegetationPrototypes, generatedTiles),
             MessageType.Info);
     }
 
@@ -627,6 +673,8 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
         streamer.detailTextureType = system.detailTexture;
         streamer.overlayConfig = system.overlays;
+        streamer.vegetationConfig = system.vegetation;
+        streamer.vegetationRadiusInKilometres = 8f;
     }
 
     private static void CopyGeneratorSettings(TerrainStreamer streamer, TerrainGenerator generator)
@@ -743,6 +791,21 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         return "Overlays activos: " + active + " (" + segments + " segmentos de ruta).";
     }
 
+    private static string DescribeVegetation(VegetationPrototype[] prototypes, int tiles)
+    {
+        if (prototypes == null || prototypes.Length == 0)
+            return "Vegetación: 0.";
+
+        int instances = 0;
+        foreach (VegetationPrototype prototype in prototypes)
+        {
+            if (prototype != null && prototype.settings != null)
+                instances += Mathf.Max(0, prototype.settings.countPerTile) * tiles;
+        }
+
+        return "Vegetación: " + prototypes.Length + " tipo(s), ~" + instances + " instancias.";
+    }
+
     private void CleanupPreview()
     {
         if (previewRoot != null)
@@ -759,6 +822,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
             DestroyImmediate(previewRoot);
             previewRoot = null;
+            previewVegetationViewer = null;
         }
 
         foreach (Mesh mesh in generatedMeshes)
@@ -780,6 +844,12 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     private class OverlayArray
     {
         public TerrainOverlay[] items;
+    }
+
+    [Serializable]
+    private class VegetationArray
+    {
+        public VegetationSettings[] items;
     }
 
     private void SyncDraftIfNeeded(bool force = false)
@@ -804,6 +874,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
             draftCliffsFromJson = false;
             draftCliffs = new CliffSettings();
             draftOverlays = new TerrainOverlay[0];
+            draftVegetation = new VegetationSettings[0];
         }
         else
         {
@@ -815,6 +886,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
             draftCliffsFromJson = draftHasCliffs;
             draftCliffs = draftHasCliffs ? CloneCliffs(system.cliffs) : new CliffSettings();
             draftOverlays = CloneOverlays(system.overlays);
+            draftVegetation = CloneVegetation(system.vegetation);
         }
 
         if (overlayFoldouts == null || overlayFoldouts.Length < 3)
@@ -834,7 +906,8 @@ public class PlanetTerrainPreviewWindow : EditorWindow
             terrainTexture = draftTerrainTexture,
             detailTexture = draftDetailTexture,
             cliffs = draftHasCliffs ? CloneCliffs(draftCliffs) : null,
-            overlays = CloneOverlays(draftOverlays)
+            overlays = CloneOverlays(draftOverlays),
+            vegetation = CloneVegetation(draftVegetation)
         };
     }
 
@@ -856,6 +929,19 @@ public class PlanetTerrainPreviewWindow : EditorWindow
             JsonUtility.ToJson(new OverlayArray { items = source }));
 
         return wrapper != null && wrapper.items != null ? wrapper.items : new TerrainOverlay[0];
+    }
+
+    private static VegetationSettings[] CloneVegetation(VegetationSettings[] source)
+    {
+        if (source == null)
+            return new VegetationSettings[0];
+
+        VegetationArray wrapper = JsonUtility.FromJson<VegetationArray>(
+            JsonUtility.ToJson(new VegetationArray { items = source }));
+
+        return wrapper != null && wrapper.items != null
+            ? wrapper.items
+            : new VegetationSettings[0];
     }
 
     private void RemoveOverlayAt(int index)
@@ -1494,6 +1580,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         builder.Append("|centerZ=").Append(centerTileZ);
         builder.Append("|overlayToggle=").Append(showOverlays ? 1 : 0);
         builder.Append("|detailToggle=").Append(showDetail ? 1 : 0);
+        builder.Append("|vegetationToggle=").Append(showVegetation ? 1 : 0);
 
         return builder.ToString();
     }

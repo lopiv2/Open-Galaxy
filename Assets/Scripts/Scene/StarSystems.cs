@@ -29,6 +29,9 @@ public class StarSystem
     public string detailTexture;
     // Optional per-planet texture overlays (paths, cliff-foot sand, cities...).
     public TerrainOverlay[] overlays;
+    // Optional per-planet vegetation (trees, bushes, dry shrubs...). Each entry
+    // is instantiated per terrain tile around the ship by TerrainStreamer.
+    public VegetationSettings[] vegetation;
     // Optional per-planet cloud roof override (StarSystems.json). Zero/empty
     // means "use the PlanetTypes.json climate defaults for planetType".
     public float cloudCoverage;
@@ -70,6 +73,36 @@ public class CliffSettings
     public int verticesPerSide;
     public int outerVerticesPerSide;
     public float highDetailRadiusKm;
+}
+
+// Per-planet vegetation entry, read from the optional "vegetation" array of a
+// StarSystems.json planet. The prefab is loaded from Resources/<folder><prefab>
+// and drawn with GPU instancing per terrain tile. The optional material name
+// overrides the prefab material (also relative to Resources/<folder>).
+[System.Serializable]
+public class VegetationSettings
+{
+    public bool enabled = true;
+    public string label;
+    public string folder = "objects/trees/";
+    public string prefab;
+    public string material;
+    // Instances per 1000 x 1000 m terrain tile (before slope rejection).
+    public int countPerTile = 500;
+    public float minScale = 2f;
+    public float maxScale = 3.5f;
+    // Slopes steeper than this (degrees from up) are skipped. 0 = no filter.
+    public float maxSlope = 30f;
+    // Tile-level draw distance from the ship, in metres.
+    public float maxDistance = 800f;
+    // How many random placements to try before giving up on one instance.
+    public int placementAttempts = 6;
+    // Wind parameters pushed to the material instance at runtime.
+    public float windStrength = 0.06f;
+    public float windSpeed = 2.2f;
+    public float windFrequency = 0.15f;
+    // Per-planet offset so two planets do not share the same shrub layout.
+    public int seedOffset = 17;
 }
 
 // Per-planet terrain texture overlays. Up to three are applied by

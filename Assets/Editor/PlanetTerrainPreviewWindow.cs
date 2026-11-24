@@ -18,6 +18,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     private const string RootNamePrefix = "PlanetTerrainPreview_";
     private const string SelectedPlanetKey = "OpenGalaxy.TerrainPreview.SelectedPlanet";
     private const float PreviewTileSize = 1000f;
+    private const double LiveRefreshDelaySeconds = 0.4;
 
     private static readonly BindingFlags InstanceFlags =
         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
@@ -30,6 +31,10 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     [SerializeField] private bool showOverlays = true;
     [SerializeField] private bool showDetail = true;
     [SerializeField] private bool regenerateAfterApply = true;
+    [SerializeField] private bool liveUpdate = true;
+    [SerializeField] private bool liveRefreshPending;
+    [SerializeField] private double liveRefreshTime;
+    [SerializeField] private string lastPreviewSignature = "";
     [SerializeField] private Vector2 panelScroll = Vector2.zero;
 
     // Editable copy of the selected planet. The preview uses these values;
@@ -53,6 +58,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     private static readonly string[] OverlayModes = { "patch", "cliffFoot", "path", "poiPath" };
 
     private StarSystems starSystems;
+    private bool liveRefreshCallbackRegistered;
     private string[] allPlanets = new string[0];
     private string[] filteredPlanets = new string[0];
     private GameObject previewRoot;
@@ -75,11 +81,23 @@ public class PlanetTerrainPreviewWindow : EditorWindow
     {
         selectedPlanet = SessionState.GetString(SelectedPlanetKey, selectedPlanet);
         LoadData();
+
+        if (!liveRefreshCallbackRegistered)
+        {
+            EditorApplication.update += HandleLiveRefresh;
+            liveRefreshCallbackRegistered = true;
+        }
     }
 
     private void OnDisable()
     {
         SessionState.SetString(SelectedPlanetKey, selectedPlanet ?? "");
+
+        if (liveRefreshCallbackRegistered)
+        {
+            EditorApplication.update -= HandleLiveRefresh;
+            liveRefreshCallbackRegistered = false;
+        }
     }
 
     private void OnDestroy()
@@ -130,6 +148,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
         RebuildFilteredPlanets();
         SyncDraftIfNeeded(true);
+        lastPreviewSignature = ComputePreviewSignature();
         SetStatus("StarSystems.json cargado. " + allPlanets.Length + " planetas disponibles.", MessageType.Info);
     }
 
@@ -174,8 +193,8 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
         EditorGUILayout.LabelField("Planet Terrain Preview", EditorStyles.boldLabel);
         EditorGUILayout.HelpBox(
-            "Edita los parámetros del planeta, genera la vista previa sin Play Mode y pulsa " +
-            "'Aplicar a JSON' para sobrescribir la configuración en StarSystems.json.",
+            "Edita los parámetros del planeta y la vista previa se actualizará sola. " +
+            "'Aplicar a JSON' sobrescribe la configuración en StarSystems.json.",
             MessageType.Info);
 
         EditorGUILayout.BeginHorizontal();
@@ -251,6 +270,16 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         showOverlays = EditorGUILayout.Toggle("Overlays (caminos/arena)", showOverlays);
         showDetail = EditorGUILayout.Toggle("Detalle cercano", showDetail);
 
+        EditorGUI.BeginChangeCheck();
+        liveUpdate = EditorGUILayout.Toggle("Actualización en vivo", liveUpdate);
+        if (EditorGUI.EndChangeCheck())
+        {
+            if (liveUpdate)
+                ScheduleLiveRefresh();
+            else
+                CancelLiveRefresh();
+        }
+
         EditorGUILayout.Space(6f);
         EditorGUI.BeginDisabledGroup(!hasPlanet);
         if (GUILayout.Button("Generar vista previa", GUILayout.Height(30f)))
@@ -264,6 +293,8 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         EditorGUILayout.HelpBox(statusMessage, statusType);
 
         EditorGUILayout.EndScrollView();
+
+        TrackLivePreviewChanges();
     }
 
     private void DrawGeneralConfig()
@@ -413,6 +444,9 @@ public class PlanetTerrainPreviewWindow : EditorWindow
         // The preview always uses the editable draft, so changes can be
         // checked before they are written to StarSystems.json.
         SyncDraftIfNeeded();
+        CancelLiveRefresh();
+        lastPreviewSignature = ComputePreviewSignature();
+
         if (system == null)
             system = BuildDraftSystem();
 
@@ -913,6 +947,7 @@ public class PlanetTerrainPreviewWindow : EditorWindow
             File.WriteAllText(path, updated);
             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
             LoadData();
+            CancelLiveRefresh();
 
             if (regenerateAfterApply)
                 GeneratePreview(null);
@@ -1446,6 +1481,69 @@ public class PlanetTerrainPreviewWindow : EditorWindow
 
         builder.Append(indent).Append(']');
         return builder.ToString();
+    }
+
+    private string ComputePreviewSignature()
+    {
+        StarSystem draft = BuildDraftSystem();
+        StringBuilder builder = new StringBuilder();
+
+        builder.Append(draft == null ? "<no-planet>" : JsonUtility.ToJson(draft));
+        builder.Append("|grid=").Append(gridSize);
+        builder.Append("|centerX=").Append(centerTileX);
+        builder.Append("|centerZ=").Append(centerTileZ);
+        builder.Append("|overlayToggle=").Append(showOverlays ? 1 : 0);
+        builder.Append("|detailToggle=").Append(showDetail ? 1 : 0);
+
+        return builder.ToString();
+    }
+
+    private void TrackLivePreviewChanges()
+    {
+        string signature = ComputePreviewSignature();
+        if (string.Equals(signature, lastPreviewSignature, StringComparison.Ordinal))
+            return;
+
+        lastPreviewSignature = signature;
+        ScheduleLiveRefresh();
+    }
+
+    private void ScheduleLiveRefresh()
+    {
+        if (!liveUpdate || !dataLoaded || FindSelectedSystem() == null)
+            return;
+
+        liveRefreshPending = true;
+        liveRefreshTime = EditorApplication.timeSinceStartup + LiveRefreshDelaySeconds;
+    }
+
+    private void CancelLiveRefresh()
+    {
+        liveRefreshPending = false;
+    }
+
+    private void HandleLiveRefresh()
+    {
+        if (!liveRefreshPending)
+            return;
+
+        if (!liveUpdate || EditorApplication.timeSinceStartup < liveRefreshTime)
+            return;
+
+        CancelLiveRefresh();
+
+        if (!dataLoaded || FindSelectedSystem() == null)
+            return;
+
+        try
+        {
+            GeneratePreview(null);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
+            SetStatus("No se pudo actualizar la vista previa: " + exception.Message, MessageType.Error);
+        }
     }
 
     private void SetStatus(string message, MessageType type)

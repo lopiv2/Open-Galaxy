@@ -1,97 +1,97 @@
 {
-    "planetPOIsData": [
+  "planetPOIsData": [
+    {
+      "planet": "Tatooine",
+      "entryX": 0.0,
+      "entryZ": 0.0,
+      "pois": [
         {
-            "planet": "Tatooine",
-            "entryX": 0.0,
-            "entryZ": 0.0,
-            "pois": [
-                {
-                    "name": "MOS EISLEY",
-                    "x": 2200.0,
-                    "z": 1600.0,
-                    "radius": 500.0
-                },
-                {
-                    "name": "ANCHORHEAD",
-                    "x": -2200.0,
-                    "z": 1700.0,
-                    "radius": 400.0
-                },
-                {
-                    "name": "TOSCHE STATION",
-                    "x": 600.0,
-                    "z": -2200.0,
-                    "radius": 300.0
-                }
-            ],
-            "props": [
-                {
-                    "prefab": "Sandcrawler",
-                    "x": 1850.0,
-                    "z": 1350.0,
-                    "rotY": 35.0,
-                    "scale": 1
-                },
-                {
-                    "prefab": "TatooineHouse",
-                    "x": 2350.0,
-                    "z": 1750.0,
-                    "rotY": 0.0,
-                    "scale": 1.0,
-                    "count": 12,
-                    "radius": 320.0,
-                    "seed": 7,
-                    "randomYaw": true,
-                    "scaleVar": 0.15,
-                    "minDist": 45.0
-                }
-            ],
-            "creatures": [
-                {
-                    "prefab": "Bantha",
-                    "x": 260.0,
-                    "z": 200.0,
-                    "herdMin": 3,
-                    "herdMax": 6,
-                    "herdRadius": 14.0,
-                    "wanderRadius": 100.0,
-                    "speed": 2.2,
-                    "seed": 11
-                },
-                {
-                    "prefab": "Bantha",
-                    "x": -720.0,
-                    "z": -540.0,
-                    "herdMin": 3,
-                    "herdMax": 6,
-                    "herdRadius": 14.0,
-                    "wanderRadius": 120.0,
-                    "speed": 2.0,
-                    "seed": 23
-                },
-                {
-                    "prefab": "Bantha",
-                    "x": 1700.0,
-                    "z": 1150.0,
-                    "herdMin": 3,
-                    "herdMax": 6,
-                    "herdRadius": 16.0,
-                    "wanderRadius": 130.0,
-                    "speed": 2.2,
-                    "seed": 37
-                },
-                {
-                    "prefab": "Bantha",
-                    "x": -1750.0,
-                    "z": 1350.0,
-                    "herdMin": 3,
-                    "herdMax": 6,
-                    "herdRadius": 16.0,
-                    "wanderRadius": 130.0,
-                    "speed": 2.1,
-                    "seed": 51
-                }
-            ]
+          "name": "MOS EISLEY",
+          "x": 2200.0,
+          "z": 1600.0,
+          "radius": 500.0
+        },
+        {
+          "name": "ANCHORHEAD",
+          "x": -2200.0,
+          "z": 1700.0,
+          "radius": 400.0
+        },
+        {
+          "name": "TOSCHE STATION",
+          "x": 600.0,
+          "z": -2200.0,
+          "radius": 300.0
         }
-    ]
+      ],
+      "props": [
+        {
+          "prefab": "Sandcrawler",
+          "x": 1850.0,
+          "z": 1350.0,
+          "rotY": 35.0,
+          "scale": 1
+        },
+        {
+          "prefab": "TatooineHouse",
+          "x": 2350.0,
+          "z": 1750.0,
+          "rotY": 0.0,
+          "scale": 1.0,
+          "count": 12,
+          "radius": 320.0,
+          "seed": 7,
+          "randomYaw": true,
+          "scaleVar": 0.15,
+          "minDist": 45.0
+        }
+      ],
+      "creatures": [
+        {
+          "prefab": "Bantha",
+          "x": 260.0,
+          "z": 200.0,
+          "herdMin": 3,
+          "herdMax": 6,
+          "herdRadius": 14.0,
+          "wanderRadius": 100.0,
+          "speed": 1.2,
+          "seed": 11
+        },
+        {
+          "prefab": "Bantha",
+          "x": -720.0,
+          "z": -540.0,
+          "herdMin": 3,
+          "herdMax": 6,
+          "herdRadius": 14.0,
+          "wanderRadius": 120.0,
+          "speed": 1.0,
+          "seed": 23
+        },
+        {
+          "prefab": "Bantha",
+          "x": 1700.0,
+          "z": 1150.0,
+          "herdMin": 3,
+          "herdMax": 6,
+          "herdRadius": 16.0,
+          "wanderRadius": 130.0,
+          "speed": 1.2,
+          "seed": 37
+        },
+        {
+          "prefab": "Bantha",
+          "x": -1750.0,
+          "z": 1350.0,
+          "herdMin": 3,
+          "herdMax": 6,
+          "herdRadius": 16.0,
+          "wanderRadius": 130.0,
+          "speed": 1.2,
+          "seed": 51
+        }
+      ]
+    }
+  ]
 }

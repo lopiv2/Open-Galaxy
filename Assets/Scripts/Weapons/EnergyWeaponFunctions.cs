@@ -890,6 +890,14 @@ public static class EnergyWeaponFunctions
     //This handles an event where the laser hits something
     public static void RunCollisionEvent(ParticleSystem particleSystemScript, Ship ship)
     {
+        if (particleSystemScript == null) { return; }
+        if (ship == null) { return; }
+
+        //A ship must never be hurt by its own lasers
+        Ship laserOwner = GetLaserOwner(ship, particleSystemScript);
+
+        if (laserOwner != null && laserOwner.gameObject == ship.gameObject) { return; }
+
         //Get collision information
         List<Vector3> hitPositions = new List<Vector3>();
         List<ParticleCollisionEvent> collisionEvents = new List<ParticleCollisionEvent>();
@@ -923,6 +931,12 @@ public static class EnergyWeaponFunctions
                     //This instantiates an explosion
                     InstantiateLaserExplosion(hitPosition, forward, shieldFront, shieldBack, ship.energyWeapon.laserColour, shieldType, audioManager);
 
+                    //This makes the energy shield ripple where the laser hit it
+                    if (shieldFront > 0 | shieldBack > 0)
+                    {
+                        ShieldVisualFunctions.RegisterImpact(ship.gameObject, hitPosition, 0.55f);
+                    }
+
                     //This makes the screen flash
                     if (objectHitDetails.isAI == false)
                     {
@@ -935,6 +949,32 @@ public static class EnergyWeaponFunctions
                 }
             }
         }
+    }
+
+    //This finds the ship that fired a laser particle system, so own shots can be ignored
+    public static Ship GetLaserOwner(Ship shipHit, ParticleSystem particleSystemScript)
+    {
+        if (particleSystemScript == null) { return null; }
+
+        //Laser turrets keep their particle systems under the ship hierarchy
+        Ship parentShip = particleSystemScript.GetComponentInParent<Ship>();
+
+        if (parentShip != null) { return parentShip; }
+
+        //Small ship lasers live in a shared anchor, so match them against the ship that owns the pool entry
+        Scene scene = null;
+
+        if (shipHit != null) { scene = shipHit.scene; }
+        if (scene == null) { scene = SceneFunctions.GetScene(); }
+        if (scene == null || scene.smallShips == null) { return null; }
+
+        foreach (Ship tempShip in scene.smallShips)
+        {
+            if (tempShip == null || tempShip.energyWeapon == null) { continue; }
+            if (tempShip.energyWeapon.particleSystemScript == particleSystemScript) { return tempShip; }
+        }
+
+        return null;
     }
 
     //This function returns the root parent of the prefab by looking for the component that will only be attached to the parent gameobject

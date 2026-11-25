@@ -70,7 +70,10 @@ public static class HudFunctions
     {
         Text missionLog = FindText("MissionLog");
 
-        missionLog.text = message.ToUpper();
+        if (missionLog != null)
+        {
+            missionLog.text = message.ToUpper();
+        }
     }
 
     //This adds information to the ship log
@@ -739,6 +742,7 @@ public static class HudFunctions
             Text targetName_text = FindText("TargetShipName");
             Text targetCargo_text = FindText("TargetShipCargo");
             Text targetDistance_text = FindText("TargetDistance");
+            Text targetStats_text = FindText("TargetShipStats");
 
             Slider targetShield = FindSlider("TargetShield");
             Slider targetHull = FindSlider("TargetHull");
@@ -751,14 +755,20 @@ public static class HudFunctions
                 targetCargo_text.text = targetShip.cargo.ToUpper();
                 targetDistance_text.text = hud.mainShip.targetingSystem.targetDistance.ToString("0000");
 
-                targetShield.maxValue = targetShip.shieldRating;
+                targetShield.maxValue = Mathf.Max(targetShip.shieldRating, 1);
                 targetShield.value = targetShip.energyManagementSystem.shieldLevel;
 
-                targetHull.maxValue = targetShip.hullRating;
+                targetHull.maxValue = Mathf.Max(targetShip.hullRating, 1);
                 targetHull.value = targetShip.energyManagementSystem.hullLevel;
 
-                targetSystems.maxValue = targetShip.systemsRating;
+                targetSystems.maxValue = Mathf.Max(targetShip.systemsRating, 1);
                 targetSystems.value = targetShip.energyManagementSystem.systemsLevel;
+
+                //This updates the holographic stats text with the real target levels
+                if (targetStats_text != null)
+                {
+                    targetStats_text.text = "SHD " + targetShip.energyManagementSystem.shieldLevel.ToString("000") + " HULL " + targetShip.energyManagementSystem.hullLevel.ToString("000") + " SYS " + targetShip.energyManagementSystem.systemsLevel.ToString("000");
+                }
             }
             else if (targetLargeShip != null)
             {
@@ -767,14 +777,20 @@ public static class HudFunctions
                 targetCargo_text.text = targetLargeShip.cargo.ToUpper();
                 targetDistance_text.text = hud.mainShip.targetingSystem.targetDistance.ToString("0000");
 
-                targetShield.maxValue = targetLargeShip.shieldRating;
+                targetShield.maxValue = Mathf.Max(targetLargeShip.shieldRating, 1);
                 targetShield.value = targetLargeShip.shieldLevel;
 
-                targetHull.maxValue = targetLargeShip.hullRating;
+                targetHull.maxValue = Mathf.Max(targetLargeShip.hullRating, 1);
                 targetHull.value = targetLargeShip.hullLevel;
 
-                targetSystems.maxValue = targetLargeShip.systemsRating;
+                targetSystems.maxValue = Mathf.Max(targetLargeShip.systemsRating, 1);
                 targetSystems.value = targetLargeShip.systemsLevel;
+
+                //This updates the holographic stats text with the real target levels
+                if (targetStats_text != null)
+                {
+                    targetStats_text.text = "SHD " + targetLargeShip.shieldLevel.ToString("000") + " HULL " + targetLargeShip.hullLevel.ToString("000") + " SYS " + targetLargeShip.systemsLevel.ToString("000");
+                }
             }
             else if (target != null && target.activeSelf == true)
             {
@@ -786,6 +802,11 @@ public static class HudFunctions
                 targetShield.value = 0;
                 targetHull.value = 0;
                 targetSystems.value = 0;
+
+                if (targetStats_text != null)
+                {
+                    targetStats_text.text = "SHD --- HULL --- SYS ---";
+                }
             }
             else
             {
@@ -796,6 +817,11 @@ public static class HudFunctions
                 targetShield.value = 0;
                 targetHull.value = 0;
                 targetSystems.value = 0;
+
+                if (targetStats_text != null)
+                {
+                    targetStats_text.text = "";
+                }
             }
         }
 

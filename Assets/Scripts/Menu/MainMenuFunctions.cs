@@ -298,6 +298,8 @@ public static class MainMenuFunctions
         mainMenu.functions.Add("StartGalaxyMode", new System.Action<string>(GalaxyModeFunctions.StartGalaxyMode));
         mainMenu.functions.Add("TestAwingTatooine", new System.Action(GalaxyPlanetTestTool.TestAwingTatooine));
         mainMenu.functions.Add("TestOnFootTatooine", new System.Action(GalaxyPlanetTestTool.TestOnFootTatooine));
+        mainMenu.functions.Add("TestFighterCombat", new System.Action(CombatTestTool.TestFighterCombat));
+        mainMenu.functions.Add("TestCapitalCombat", new System.Action(CombatTestTool.TestCapitalCombat));
         mainMenu.functions.Add("ChangeDefaultCameraPosition", new System.Action<string>(ChangeDefaultCameraPosition));
         mainMenu.functions.Add("ChangeResolution", new System.Action<string>(ChangeResolution));
         mainMenu.functions.Add("ChangeDamageLevel", new System.Action<string>(ChangeDamageLevel));

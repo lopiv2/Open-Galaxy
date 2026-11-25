@@ -876,7 +876,11 @@ public static class LaserTurretFunctions
 
             if (laserTurret != null & objectHitParent != null)
             {
-                if (objectHitParent != laserTurret.gameObject)
+                //A ship must never be hurt by its own turret lasers
+                Transform turretShip = laserTurret.shipGO != null ? laserTurret.shipGO.transform : laserTurret.transform;
+                bool hitOwnShip = objectHit == null ? true : objectHit.transform.IsChildOf(turretShip);
+
+                if (objectHitParent != laserTurret.gameObject && hitOwnShip == false)
                 {
                     //This gets key information on the object hit
                     var objectHitDetails = LaserTurretFunctions.ObjectHitDetails(objectHit, hitPosition);
@@ -898,6 +902,19 @@ public static class LaserTurretFunctions
                    
                     //This instantiates an explosion at the hit position
                     LaserTurretFunctions.InstantiateLaserExplosion(laserTurret.gameObject, objectHit, hitPosition, forward, shieldFront, shieldBack, size, laserTurret.laserColor, shieldType, audioManager);
+
+                    //This makes the energy shield ripple where the laser hit it
+                    if (shieldFront > 0 | shieldBack > 0)
+                    {
+                        float impactStrength = 0.55f;
+
+                        if (size == "large")
+                        {
+                            impactStrength = 1f;
+                        }
+
+                        ShieldVisualFunctions.RegisterImpact(objectHit, hitPosition, impactStrength);
+                    }
 
                     if (objectHitDetails.isAI == false)
                     {

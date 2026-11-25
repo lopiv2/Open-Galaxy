@@ -57,6 +57,22 @@
       "Variable": "none"
     },
     {
+      "ParentMenu": "Tools",
+      "Name": "Test combate: X-Wing vs caza estatico",
+      "Description": "X-Wing contra un caza enemigo quieto delante de ti, sin pasar por el mapa de la galaxia",
+      "Function": "TestFighterCombat",
+      "Type": "ContentButton01",
+      "Variable": "none"
+    },
+    {
+      "ParentMenu": "Tools",
+      "Name": "Test combate: X-Wing vs nave capital estatica",
+      "Description": "X-Wing contra una nave capital quieta con torretas, para probar escudos, dano y torretas",
+      "Function": "TestCapitalCombat",
+      "Type": "ContentButton01",
+      "Variable": "none"
+    },
+    {
       "ParentMenu": "none",
       "Name": "Credits",
       "Description": "none",

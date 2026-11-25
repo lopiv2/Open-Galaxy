@@ -1116,6 +1116,9 @@ public static class SceneFunctions
                 laserTurret.smallTurretDamage = shipType.smallturret;
             }
 
+            //Adds the energy shield visual to the ship
+            ShieldVisual shieldVisual = shipGO.AddComponent<ShieldVisual>();
+
             //Set ship position, rotation and scale
 
             ScaleGameObjectByZAxis(shipGO, shipType.shipLength); //The scale must be applied before the ship is position and rotated otherwise the scaling will be inaccurate

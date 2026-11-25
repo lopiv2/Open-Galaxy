@@ -422,8 +422,14 @@ public static class TorpedoSystemFunctions
 
         Collider torpedoCollider = torpedo.gameObject.GetComponentInChildren<Collider>();
 
+        if (torpedoCollider == null) { return; }
+        if (torpedo.attackingShip == null) { return; }
+        if (torpedo.attackingShip.flightControlSystem_Small == null) { return; }
+
         foreach (Collider collider in torpedo.attackingShip.flightControlSystem_Small.colliders)
         {
+            if (collider == null) { continue; }
+
             Physics.IgnoreCollision(collider, torpedoCollider, true);
         }
     }
@@ -639,6 +645,14 @@ public static class TorpedoSystemFunctions
     //This runs the torpedo collision event
     public static void RunCollisionEvent(Torpedo torpedo, Collision collision)
     {
+        //A ship must never be hurt by its own torpedo
+        if (collision == null) { return; }
+
+        if (torpedo.attackingShip != null && collision.gameObject.transform.IsChildOf(torpedo.attackingShip.transform))
+        {
+            return;
+        }
+
         CauseTorpedoDamage(torpedo.attackingShip, collision.gameObject, torpedo, collision.transform.position);
 
         foreach (ContactPoint contact in collision.contacts)
@@ -756,7 +770,10 @@ public static class TorpedoSystemFunctions
             }
             else if (largeShip != null)
             {
-                DamageSystemFunctions.TakeDamage_LargeShip(largeShip, torpedo.damagePower * 4, hitPosition);
+                if (firingShip == null || largeShip.gameObject != firingShip.gameObject)
+                {
+                    DamageSystemFunctions.TakeDamage_LargeShip(largeShip, torpedo.damagePower * 4, hitPosition);
+                }
             }
         }
     }

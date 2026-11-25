@@ -247,7 +247,7 @@ public static class MainMenuFunctions
         LoadButtons();
 
         //This gets the reference to the main menu (NOTE: if you have more than one main menu you will need to change this line as this line will just grab the first menu reference it can find)
-        MainMenu mainMenu = GameObject.FindFirstObjectByType<MainMenu>();
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>();
 
         //This creates the function dictionary
         CreateFunctionDictionary(mainMenu);
@@ -280,7 +280,7 @@ public static class MainMenuFunctions
     //This grabs all the button prefabs ready to instantiate
     public static void LoadButtons()
     {
-        MainMenu mainMenu = GameObject.FindFirstObjectByType<MainMenu>();
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>();
 
         mainMenu.buttons = Resources.LoadAll<GameObject>(OGGetAddress.menubuttons);
     }
@@ -297,6 +297,7 @@ public static class MainMenuFunctions
         mainMenu.functions.Add("SelectGalaxyLaser", new System.Action<string>(GalaxyModeFunctions.SelectGalaxyLaser));
         mainMenu.functions.Add("StartGalaxyMode", new System.Action<string>(GalaxyModeFunctions.StartGalaxyMode));
         mainMenu.functions.Add("TestAwingTatooine", new System.Action(GalaxyPlanetTestTool.TestAwingTatooine));
+        mainMenu.functions.Add("TestOnFootTatooine", new System.Action(GalaxyPlanetTestTool.TestOnFootTatooine));
         mainMenu.functions.Add("ChangeDefaultCameraPosition", new System.Action<string>(ChangeDefaultCameraPosition));
         mainMenu.functions.Add("ChangeResolution", new System.Action<string>(ChangeResolution));
         mainMenu.functions.Add("ChangeDamageLevel", new System.Action<string>(ChangeDamageLevel));
@@ -904,7 +905,7 @@ public static class MainMenuFunctions
     //Move back to parent menu
     public static void ActivateParentMenu()
     {
-        MainMenu mainMenu = GameObject.FindFirstObjectByType<MainMenu>();
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>();
 
         if (mainMenu == null)
         {
@@ -1650,7 +1651,7 @@ public static class MainMenuFunctions
     //This outputs a message to the menu
     public static void OutputMenuMessage(string message)
     {
-        MainMenu mainMenu = GameObject.FindFirstObjectByType<MainMenu>();
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>();
 
         if (mainMenu.menuMessage != null)
         {
@@ -1665,7 +1666,7 @@ public static class MainMenuFunctions
     //This toggles the menu music
     public static void PlayBackgroundMusic (bool input)
     {
-        MainMenu mainMenu = GameObject.FindObjectOfType<MainMenu>();
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>();
 
         if (mainMenu.musicAudioSoure != null)
         {
@@ -1791,7 +1792,7 @@ public static class MainMenuFunctions
     //This returns the main menu
     public static MainMenu GetMainMenu()
     {
-        MainMenu mainMenu = GameObject.FindFirstObjectByType<MainMenu>(FindObjectsInactive.Include);
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>(FindObjectsInactive.Include);
 
         return mainMenu;
     }

@@ -22,7 +22,7 @@ public class ButtonInfo : MonoBehaviour, ISelectHandler, IPointerEnterHandler
 
     void Start()
     {
-        mainMenu = GameObject.FindFirstObjectByType<MainMenu>();
+        mainMenu = GameObject.FindAnyObjectByType<MainMenu>();
         scrollRect = GetComponentInParent<ScrollRect>();
         button = GetComponent<RectTransform>();
     }

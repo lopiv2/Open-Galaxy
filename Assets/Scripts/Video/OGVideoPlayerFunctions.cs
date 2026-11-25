@@ -236,7 +236,7 @@ public static class OGVideoPlayerFunctions
     //This grabs the OGVideoPlayer reference in the scene
     public static OGVideoPlayer GetOGVideoPlayer()
     {
-        OGVideoPlayer ogVideoPlayer = GameObject.FindFirstObjectByType<OGVideoPlayer>();
+        OGVideoPlayer ogVideoPlayer = GameObject.FindAnyObjectByType<OGVideoPlayer>();
 
         return ogVideoPlayer;
     }

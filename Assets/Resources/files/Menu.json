@@ -49,6 +49,14 @@
       "Variable": "none"
     },
     {
+      "ParentMenu": "Tools",
+      "Name": "Test a pie en Tatooine (aterrizado)",
+      "Description": "Nave aterrizada y personaje a pie directo, para probar el modo caminar",
+      "Function": "TestOnFootTatooine",
+      "Type": "ContentButton01",
+      "Variable": "none"
+    },
+    {
       "ParentMenu": "none",
       "Name": "Credits",
       "Description": "none",

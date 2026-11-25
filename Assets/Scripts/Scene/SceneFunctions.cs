@@ -2800,7 +2800,7 @@ public static class SceneFunctions
     //Allows the player ship or AI to declare itself to the scene as the main ship
     public static void IdentifyAsMainShip(FlightControlSystem_Small smallShip)
     {
-        Scene scene = GameObject.FindObjectOfType<Scene>();  //This gets the scene reference
+        Scene scene = GameObject.FindAnyObjectByType<Scene>();  //This gets the scene reference
 
         scene.mainShip = smallShip.gameObject;
 
@@ -2811,7 +2811,7 @@ public static class SceneFunctions
     {
         Scene scene;
 
-        scene = GameObject.FindFirstObjectByType<Scene>(FindObjectsInactive.Include);//This gets the scene reference
+        scene = GameObject.FindAnyObjectByType<Scene>(FindObjectsInactive.Include);//This gets the scene reference
 
         return scene;
     }

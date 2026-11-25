@@ -296,7 +296,7 @@ public static class MissionFunctions
     //This runs a series of events
     public static IEnumerator RunEventSeries(Mission mission, int eventSeries)
     {
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         while (missionManager.running == true & missionManager.eventNo[eventSeries] != 11111)
         {
@@ -344,7 +344,7 @@ public static class MissionFunctions
     //This looks for the next event to run
     public static void FindNextEvent(string nextEvent, int eventSeries)
     {
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         if (nextEvent != "none" & missionManager != null)
         {
@@ -1744,7 +1744,7 @@ public static class MissionFunctions
     //This exits the mission back to the main menu
     public static void ExitMission()
     {
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
         
         if (missionManager != null)
         {
@@ -3519,7 +3519,7 @@ public static class MissionFunctions
     //This changes the type of music that is playing
     public static void PlayMusicTrack(MissionEvent missionEvent)
     {
-        Music musicManager = GameObject.FindObjectOfType<Music>();
+        Music musicManager = GameObject.FindAnyObjectByType<Music>();
 
         string track = missionEvent.data1;
         bool loop = false;
@@ -3970,7 +3970,7 @@ public static class MissionFunctions
     //This sets an objective for the player to complete, removes an objective, or clears all objectives.
     public static void SetObjective(MissionEvent missionEvent)
     {
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         string mode = missionEvent.data1;
         string objective = missionEvent.data2;
@@ -4876,7 +4876,7 @@ public static class MissionFunctions
 
         if (missionManager.missionBriefing == null)
         {
-            missionManager.missionBriefing = GameObject.FindFirstObjectByType<MissionBriefing>();
+            missionManager.missionBriefing = GameObject.FindAnyObjectByType<MissionBriefing>();
         }
 
         if (missionManager.missionBriefing != null)
@@ -4912,7 +4912,7 @@ public static class MissionFunctions
     //This unloads the mission and exits back to the main screen
     public static void ReturnToMainMenu()
     {
-        MainMenu mainMenu = GameObject.FindObjectOfType<MainMenu>(true);
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>(FindObjectsInactive.Include);
 
         if (mainMenu != null)
         {
@@ -4934,7 +4934,7 @@ public static class MissionFunctions
     {
         Scene scene = SceneFunctions.GetScene();
 
-        ExitMenu exitMenu = GameObject.FindFirstObjectByType<ExitMenu>();
+        ExitMenu exitMenu = GameObject.FindAnyObjectByType<ExitMenu>();
         GameObject fade = scene.fade;
         GameObject missionBriefing = scene.missionBriefing;
         GameObject nextMissionScreen = GameObject.Find("NextMission");
@@ -4946,7 +4946,7 @@ public static class MissionFunctions
 
         Task a = new Task(SceneFunctions.UnloadScene());
 
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>(FindObjectsInactive.Include);
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>(FindObjectsInactive.Include);
         GameObject missionManagerGO = missionManager.gameObject;
 
         //This stops any active event series coroutines so they don't continue running when a new mission is loaded
@@ -5069,7 +5069,7 @@ public static class MissionFunctions
     //This returns the mission manager when requested
     public static MissionManager GetMissionManager()
     {
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         return missionManager;
     }

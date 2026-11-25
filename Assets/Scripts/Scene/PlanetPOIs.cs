@@ -27,6 +27,26 @@ public class PlanetPOIProp
 }
 
 [System.Serializable]
+public class PlanetPOICreature
+{
+    // Resources prefab name inside objects/creatures/ (e.g. "Bantha").
+    public string prefab;
+    // Herd centre, planet-local meters (same frame as POI/prop x/z).
+    public float x;
+    public float z;
+    // Random herd size, inclusive.
+    public int herdMin = 3;
+    public int herdMax = 6;
+    // Initial spread around the herd centre (meters).
+    public float herdRadius = 14f;
+    // Roaming radius around the herd centre (meters).
+    public float wanderRadius = 90f;
+    // Walk speed (meters per second).
+    public float speed = 2.2f;
+    public int seed = 1;
+}
+
+[System.Serializable]
 public class PlanetPOILocation
 {
     public string planet;
@@ -36,6 +56,8 @@ public class PlanetPOILocation
     public float entryZ;
     public PlanetPOIEntry[] pois;
     public PlanetPOIProp[] props;
+    // Ambient fauna herds (not POIs/navigation targets).
+    public PlanetPOICreature[] creatures;
 }
 
 [System.Serializable]

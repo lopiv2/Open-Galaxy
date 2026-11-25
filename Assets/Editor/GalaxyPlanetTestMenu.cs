@@ -6,6 +6,7 @@ using UnityEngine;
 public static class GalaxyPlanetTestMenu
 {
     private const string StartTestOnPlayKey = "OpenGalaxy.StartPlanetTestOnPlay";
+    private const string StartFootTestOnPlayKey = "OpenGalaxy.StartFootTestOnPlay";
     private static int readyTicks;
 
     static GalaxyPlanetTestMenu()
@@ -14,7 +15,7 @@ public static class GalaxyPlanetTestMenu
         EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
         EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
 
-        if (SessionState.GetBool(StartTestOnPlayKey, false))
+        if (SessionState.GetBool(StartTestOnPlayKey, false) || SessionState.GetBool(StartFootTestOnPlayKey, false))
         {
             EditorApplication.update += RunWhenReady;
         }
@@ -29,7 +30,25 @@ public static class GalaxyPlanetTestMenu
             return;
         }
 
-        SessionState.SetBool(StartTestOnPlayKey, true);
+        ArmAndPlay(false);
+    }
+
+    [UnityEditor.MenuItem("Tools/Open Galaxy/Test a pie en Tatooine (aterrizado)")]
+    private static void RunFootTest()
+    {
+        if (EditorApplication.isPlaying)
+        {
+            GalaxyPlanetTestTool.TestOnFootTatooine();
+            return;
+        }
+
+        ArmAndPlay(true);
+    }
+
+    private static void ArmAndPlay(bool footTest)
+    {
+        SessionState.SetBool(StartTestOnPlayKey, !footTest);
+        SessionState.SetBool(StartFootTestOnPlayKey, footTest);
         readyTicks = 0;
         EditorApplication.update -= RunWhenReady;
         EditorApplication.update += RunWhenReady;
@@ -38,7 +57,10 @@ public static class GalaxyPlanetTestMenu
 
     private static void RunWhenReady()
     {
-        if (!SessionState.GetBool(StartTestOnPlayKey, false))
+        bool startTest = SessionState.GetBool(StartTestOnPlayKey, false);
+        bool startFootTest = SessionState.GetBool(StartFootTestOnPlayKey, false);
+
+        if (startTest == false && startFootTest == false)
         {
             EditorApplication.update -= RunWhenReady;
             return;
@@ -58,6 +80,7 @@ public static class GalaxyPlanetTestMenu
             if (readyTicks > 600)
             {
                 SessionState.SetBool(StartTestOnPlayKey, false);
+                SessionState.SetBool(StartFootTestOnPlayKey, false);
                 EditorApplication.update -= RunWhenReady;
                 Debug.LogWarning("[PlanetTest] MainMenu no encontrado, test cancelado.");
             }
@@ -65,8 +88,17 @@ public static class GalaxyPlanetTestMenu
         }
 
         SessionState.SetBool(StartTestOnPlayKey, false);
+        SessionState.SetBool(StartFootTestOnPlayKey, false);
         EditorApplication.update -= RunWhenReady;
-        GalaxyPlanetTestTool.TestAwingTatooine();
+
+        if (startFootTest == true)
+        {
+            GalaxyPlanetTestTool.TestOnFootTatooine();
+        }
+        else
+        {
+            GalaxyPlanetTestTool.TestAwingTatooine();
+        }
     }
 
     private static void OnPlayModeStateChanged(PlayModeStateChange state)
@@ -74,6 +106,7 @@ public static class GalaxyPlanetTestMenu
         if (state == PlayModeStateChange.EnteredEditMode)
         {
             SessionState.SetBool(StartTestOnPlayKey, false);
+            SessionState.SetBool(StartFootTestOnPlayKey, false);
             EditorApplication.update -= RunWhenReady;
         }
     }

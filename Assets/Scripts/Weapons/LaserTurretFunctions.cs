@@ -886,7 +886,7 @@ public static class LaserTurretFunctions
                     float forward = objectHitDetails.forward;
                     string shieldType = objectHitDetails.shieldType;
 
-                    Audio audioManager = GameObject.FindFirstObjectByType<Audio>();
+                    Audio audioManager = GameObject.FindAnyObjectByType<Audio>();
 
                     //This gets the size of the laser to make sure the explosion matches
                     string size = "small";

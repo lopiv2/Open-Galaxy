@@ -1107,7 +1107,7 @@ public static class MissionEditorFunctions
     {
         bool isFocused = false;
 
-        InputField[] inputFields = GameObject.FindObjectsOfType<InputField>();
+        InputField[] inputFields = GameObject.FindObjectsByType<InputField>(FindObjectsInactive.Exclude);
 
         foreach (InputField inputField in inputFields)
         {
@@ -2629,7 +2629,7 @@ public static class MissionEditorFunctions
     //This function returns the active mission editor script when called
     public static MissionEditor GetMissionEditor()
     {
-        MissionEditor missionEditor = GameObject.FindFirstObjectByType<MissionEditor>();
+        MissionEditor missionEditor = GameObject.FindAnyObjectByType<MissionEditor>();
 
         return missionEditor;
     }

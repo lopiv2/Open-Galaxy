@@ -80,6 +80,9 @@ public class TerrainStreamer : MonoBehaviour
     [Header("Footsteps")]
     [Tooltip("Per-planet footstep surfaces from StarSystems.json (texture keyword -> audioclip).")]
     public FootstepSurface[] footstepConfig;
+    [Header("Landing dust")]
+    [Tooltip("Per-planet landing dust tuning from StarSystems.json (tint / amount / audio).")]
+    public LandingDustSettings landingDust;
     private const int MaxOverlaySlots = 3;
     private const int MaxPathSegments = 16;
 
@@ -1506,6 +1509,13 @@ public class TerrainStreamer : MonoBehaviour
         // Add collider for physics
         MeshCollider collider = tileObject.AddComponent<MeshCollider>();
         collider.convex = false;
+
+        // Describe the ground so landing dust (and anything else that hits
+        // the tile) knows whether it is sand, rock, snow...
+        TerrainSurface surface = tileObject.AddComponent<TerrainSurface>();
+        Texture2D groundTexture = finalIndex < terrainTextures.Length
+            ? terrainTextures[finalIndex] : null;
+        surface.ApplyTexture(groundTexture != null ? groundTexture.name : null, landingDust);
 
         loadedTiles.Add(coordinate, tileObject);
     }

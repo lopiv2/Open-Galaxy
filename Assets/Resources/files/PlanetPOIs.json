@@ -45,6 +45,52 @@
                     "scaleVar": 0.15,
                     "minDist": 45.0
                 }
+            ],
+            "creatures": [
+                {
+                    "prefab": "Bantha",
+                    "x": 260.0,
+                    "z": 200.0,
+                    "herdMin": 3,
+                    "herdMax": 6,
+                    "herdRadius": 14.0,
+                    "wanderRadius": 100.0,
+                    "speed": 2.2,
+                    "seed": 11
+                },
+                {
+                    "prefab": "Bantha",
+                    "x": -720.0,
+                    "z": -540.0,
+                    "herdMin": 3,
+                    "herdMax": 6,
+                    "herdRadius": 14.0,
+                    "wanderRadius": 120.0,
+                    "speed": 2.0,
+                    "seed": 23
+                },
+                {
+                    "prefab": "Bantha",
+                    "x": 1700.0,
+                    "z": 1150.0,
+                    "herdMin": 3,
+                    "herdMax": 6,
+                    "herdRadius": 16.0,
+                    "wanderRadius": 130.0,
+                    "speed": 2.2,
+                    "seed": 37
+                },
+                {
+                    "prefab": "Bantha",
+                    "x": -1750.0,
+                    "z": 1350.0,
+                    "herdMin": 3,
+                    "herdMax": 6,
+                    "herdRadius": 16.0,
+                    "wanderRadius": 130.0,
+                    "speed": 2.1,
+                    "seed": 51
+                }
             ]
         }
     ]

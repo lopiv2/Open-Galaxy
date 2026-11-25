@@ -911,7 +911,7 @@ public static class EnergyWeaponFunctions
                 if (ship != null)
                 {
                     //This gets a key reference, audiomanager
-                    Audio audioManager = GameObject.FindFirstObjectByType<Audio>();
+                    Audio audioManager = GameObject.FindAnyObjectByType<Audio>();
 
                     //This gets key information on the object hit
                     var objectHitDetails = ObjectHitDetails(ship.gameObject, hitPosition);

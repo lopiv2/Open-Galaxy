@@ -37,6 +37,10 @@ public class StarSystem
     // Resources/audio/audioclips. First keyword match wins; an entry with an
     // empty/default texture acts as fallback when nothing else matches.
     public FootstepSurface[] footsteps;
+    // Optional landing dust tuning. The surface family (sand, rock, snow...)
+    // is detected per tile from its ground texture; this block tints/tunes
+    // the kicked-up dust for the whole planet. Missing block = defaults.
+    public LandingDustSettings landingDust;
     // Optional per-planet cloud roof override (StarSystems.json). Zero/empty
     // means "use the PlanetTypes.json climate defaults for planetType".
     public float cloudCoverage;
@@ -158,6 +162,29 @@ public class FootstepSurface
     public float volume = 0.6f;
     public float pitchMin = 0.92f;
     public float pitchMax = 1.08f;
+}
+
+// Per-planet tuning for the ship landing dust ("landingDust" block in
+// StarSystems.json). The surface type still comes from each terrain tile's
+// texture, so rock tiles keep their grey dust; these values tint and scale
+// the effect on that planet only (Tatooine = warm sand).
+[System.Serializable]
+public class LandingDustSettings
+{
+    public bool enabled = true;
+    // Hex colour multiplied over the surface-family default ("" = white).
+    public string color;
+    // Multipliers over the per-surface defaults (<= 0 = keep default).
+    public float amount = 1f;
+    public float size = 1f;
+    public float speed = 1f;
+    public float lifetime = 1f;
+    public float updraft = 1f;
+    // Optional altitude override where the descent dust starts (0 = default).
+    public float altitude;
+    // Optional touchdown audio (audioclip name without extension).
+    public string audioClip;
+    public float audioVolume = 0.8f;
 }
 
 [System.Serializable]

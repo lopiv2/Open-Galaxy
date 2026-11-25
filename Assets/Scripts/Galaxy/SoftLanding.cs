@@ -19,6 +19,15 @@ public class SoftLanding : MonoBehaviour
 
     [Header("Visual Feedback")]
     public ParticleSystem landingEffect;
+    [Tooltip("Dust kicked up by the landing. Created automatically if empty.")]
+    public ShipLandingDust landingDust;
+
+    [Header("Boarding zone")]
+    [Tooltip("Radius (metres) of the blue halo ring around the landed ship. On foot, C only boards inside it.")]
+    public float boardingRadius = 14f;
+    public Color boardingZoneColor = new Color(0.24f, 0.62f, 1f, 1f);
+
+    private LandingZone landingZone;
 
     private FlightControlSystem_Small flight;
     private Rigidbody shipRigidbody;
@@ -39,6 +48,17 @@ public class SoftLanding : MonoBehaviour
     // and make the MinClearance clamp pop the ship back into the air.
     [HideInInspector] public bool suspended = false;
 
+    // Test hooks (used by GalaxyPlanetTestTool foot test).
+    public bool LandedState { get { return landed; } }
+
+    // Runs the same flow as pressing Z. Returns true if the descent started
+    // or the ship is already down.
+    public bool TryLandForTest()
+    {
+        AttemptSoftLanding();
+        return landing == true || landed == true;
+    }
+
     private void Start()
     {
         EnsureReferences();
@@ -49,6 +69,7 @@ public class SoftLanding : MonoBehaviour
         }
 
         CreateLandingMarker();
+        CreateLandingZone();
     }
 
     private void EnsureReferences()
@@ -67,6 +88,21 @@ public class SoftLanding : MonoBehaviour
         {
             // The rigidbody is added by PrepareShip() on the first Update.
             shipRigidbody = GetComponent<Rigidbody>();
+        }
+    }
+
+    // Adds the dust effect the first time the player actually lands. AI ships
+    // never reach this code, so they pay no per-frame cost.
+    private void EnsureLandingDust()
+    {
+        if (landingDust == null)
+        {
+            landingDust = GetComponent<ShipLandingDust>();
+        }
+
+        if (landingDust == null)
+        {
+            landingDust = gameObject.AddComponent<ShipLandingDust>();
         }
     }
 
@@ -117,6 +153,38 @@ public class SoftLanding : MonoBehaviour
         }
 
         landingMarkerGO.SetActive(false);
+    }
+
+    private void CreateLandingZone()
+    {
+        GameObject zoneGO = new GameObject("LandingZone");
+        Scene scene = SceneFunctions.GetScene();
+
+        if (scene != null)
+        {
+            zoneGO.transform.SetParent(scene.transform, false);
+        }
+
+        landingZone = zoneGO.AddComponent<LandingZone>();
+        landingZone.radius = Mathf.Max(1f, boardingRadius);
+        landingZone.color = boardingZoneColor;
+    }
+
+    // Used by foot mode: the player can only board while standing inside the
+    // blue ring around the landed ship.
+    public bool IsInsideLandingZone(Vector3 worldPosition)
+    {
+        // The zone itself owns the radius, so the rule always matches the ring
+        // that is drawn on the ground.
+        if (landingZone != null)
+        {
+            return landingZone.Contains(worldPosition);
+        }
+
+        float radius = Mathf.Max(1f, boardingRadius);
+        Vector3 delta = worldPosition - transform.position;
+        delta.y = 0f;
+        return delta.sqrMagnitude <= radius * radius;
     }
 
     private void Update()
@@ -267,6 +335,17 @@ public class SoftLanding : MonoBehaviour
         Vector3 start = transform.position;
         Vector3 end = new Vector3(start.x, groundHeight + landingAltitude, start.z);
 
+        Vector3 landingPoint = new Vector3(end.x, groundHeight, end.z);
+
+        // Kick up dust for the descent: the effect starts as a thin trickle
+        // and grows into a full wash right before the ship touches down.
+        EnsureLandingDust();
+
+        if (landingDust != null)
+        {
+            landingDust.BeginDescent();
+        }
+
         // Level the ship with the horizon while it settles (keeps current heading).
         Quaternion startRotation = transform.rotation;
         Vector3 heading = Vector3.ProjectOnPlane(startRotation * Vector3.forward, Vector3.up);
@@ -287,6 +366,11 @@ public class SoftLanding : MonoBehaviour
             transform.rotation = Quaternion.Slerp(startRotation, endRotation, t);
             StopShipMotion();
 
+            if (landingDust != null)
+            {
+                landingDust.UpdateDescent(transform.position, groundHeight);
+            }
+
             // Engine pitch and volume follow the same curve as the descent:
             // by the time the ship touches down the engine is completely off.
             if (flight != null)
@@ -302,6 +386,11 @@ public class SoftLanding : MonoBehaviour
         transform.position = end;
         transform.rotation = endRotation;
         StopShipMotion();
+
+        if (landingDust != null)
+        {
+            landingDust.PlayTouchdown(landingPoint, groundHeight);
+        }
 
         // Fully shut the engine down while landed.
         if (flight != null)
@@ -365,6 +454,16 @@ public class SoftLanding : MonoBehaviour
         takeoffArmed = false;
         GalaxyPlanetEntry.IsLanded = false;
 
+        if (landingDust != null)
+        {
+            landingDust.StopDust();
+        }
+
+        if (landingZone != null)
+        {
+            landingZone.Hide();
+        }
+
         if (flight != null)
         {
             flight.docking = previousDocking;
@@ -410,6 +509,16 @@ public class SoftLanding : MonoBehaviour
         landed = false;
         takeoffArmed = false;
         GalaxyPlanetEntry.IsLanded = false;
+
+        if (landingDust != null)
+        {
+            landingDust.StopDust();
+        }
+
+        if (landingZone != null)
+        {
+            landingZone.Hide();
+        }
 
         if (flight != null)
         {
@@ -535,7 +644,28 @@ public class SoftLanding : MonoBehaviour
         {
             landingMarkerGO.SetActive(false);
             hintShown = false;
+
+            if (landingZone != null)
+            {
+                landingZone.Hide();
+            }
+
             return;
+        }
+
+        // Blue boarding ring: only while the ship is actually resting on the
+        // ground (foot mode reads it to decide if C can board).
+        if (landingZone != null)
+        {
+            if (landed == true)
+            {
+                landingZone.radius = Mathf.Max(1f, boardingRadius);
+                landingZone.Show(new Vector3(shipPos.x, groundHeight, shipPos.z), groundHeight);
+            }
+            else
+            {
+                landingZone.Hide();
+            }
         }
 
         float currentAltitude = shipPos.y - groundHeight;
@@ -611,6 +741,11 @@ public class SoftLanding : MonoBehaviour
         if (landingMarkerGO != null)
         {
             GameObject.Destroy(landingMarkerGO);
+        }
+
+        if (landingZone != null)
+        {
+            GameObject.Destroy(landingZone.gameObject);
         }
 
         if (landed == true || landing == true)

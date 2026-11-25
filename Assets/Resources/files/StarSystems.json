@@ -29196,6 +29196,18 @@
       "planetDistance": 50.0,
       "terrainTexture": "dune",
       "detailTexture": "dune_detail",
+      "landingDust": {
+        "enabled": true,
+        "color": "#D9C39A",
+        "amount": 1.15,
+        "size": 1.1,
+        "speed": 1.0,
+        "lifetime": 1.1,
+        "updraft": 1.0,
+        "altitude": 40.0,
+        "audioClip": "",
+        "audioVolume": 0.8
+      },
       "cliffs": {
         "enabled": true,
         "mesaHeight": 60.0,

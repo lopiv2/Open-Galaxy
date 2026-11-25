@@ -325,7 +325,7 @@ public class GroundFootprints : MonoBehaviour
             return streamer;
         }
 
-        streamer = FindObjectOfType<TerrainStreamer>();
+        streamer = FindAnyObjectByType<TerrainStreamer>();
         return streamer;
     }
 

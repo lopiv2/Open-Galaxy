@@ -55,7 +55,7 @@ public static class MusicFunctions
 
     public static void UnloadMusicManager()
     {
-        Music music = GameObject.FindFirstObjectByType<Music>();
+        Music music = GameObject.FindAnyObjectByType<Music>();
 
         if (music != null)
         {

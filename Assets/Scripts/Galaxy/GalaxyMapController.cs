@@ -94,7 +94,7 @@ public class GalaxyMapController : MonoBehaviour
 
     void Update()
     {
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         if (missionManager == null || missionManager.running == false)
         {
@@ -287,7 +287,7 @@ public class GalaxyMapController : MonoBehaviour
         }
 
         // Only restore flight state if we are still in a galaxy mission.
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         if (missionManager != null && missionManager.missionName != null && missionManager.missionName.StartsWith("Galaxy Mode"))
         {
@@ -369,7 +369,7 @@ public class GalaxyMapController : MonoBehaviour
     private static IEnumerator JumpRoutine(string destination)
     {
         Scene scene = SceneFunctions.GetScene();
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         if (scene == null || scene.mainShip == null)
         {
@@ -609,8 +609,11 @@ public class GalaxyMapController : MonoBehaviour
             toggleCanvasGO = BuildToggleCanvas();
         }
 
-        // Hide the mini-button while the full map is open or jumping.
-        bool showToggle = IsMapOpen == false && IsTraveling == false;
+        // Hide the mini-button while the full map is open or jumping, and also
+        // while walking (on foot the only HUD element is the compass).
+        bool onFoot = GroundCharacterController.Instance != null
+            && GroundCharacterController.Instance.IsActive == true;
+        bool showToggle = IsMapOpen == false && IsTraveling == false && onFoot == false;
         toggleCanvasGO.SetActive(showToggle);
     }
 
@@ -658,7 +661,7 @@ public class GalaxyMapController : MonoBehaviour
 
     private static void EnsureEventSystem()
     {
-        EventSystem eventSystem = GameObject.FindFirstObjectByType<EventSystem>();
+        EventSystem eventSystem = GameObject.FindAnyObjectByType<EventSystem>();
 
         if (eventSystem == null)
         {

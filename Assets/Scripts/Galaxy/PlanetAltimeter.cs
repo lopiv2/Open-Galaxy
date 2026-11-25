@@ -50,8 +50,14 @@ public class PlanetAltimeter : MonoBehaviour
 
     private void Update()
     {
+        // The altimeter is a ship instrument: never show it on foot.
+        bool onFoot = GroundCharacterController.Instance != null
+            && GroundCharacterController.Instance.IsActive == true;
+
         // Never show the altimeter in space.
-        bool visible = GalaxyPlanetEntry.IsOnPlanet == true && GalaxyPlanetEntry.IsTransitioning == false;
+        bool visible = GalaxyPlanetEntry.IsOnPlanet == true
+            && GalaxyPlanetEntry.IsTransitioning == false
+            && onFoot == false;
 
         if (root != null && root.gameObject.activeSelf != visible)
         {

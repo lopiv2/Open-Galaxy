@@ -196,6 +196,13 @@ public static class HudFunctions
     //This displays the front radar
     public static void DisplayFrontRadar(Hud hud)
     {
+        // On foot the compass replaces the radar: skip the dot work and let
+        // GroundCompass keep the Radar group hidden.
+        if (GroundCharacterController.Instance != null && GroundCharacterController.Instance.IsActive)
+        {
+            return;
+        }
+
         CanvasGroup radar = FindCanvasGroup("Radar");
 
         if (hud.scene == null)
@@ -868,6 +875,13 @@ public static class HudFunctions
     //This displays the intercept point
     public static void DisplayWaypoint(Hud hud)
     {
+        // On foot the compass replaces the 3D waypoint marker: skip the work
+        // and let GroundCompass keep the Waypoint group hidden.
+        if (GroundCharacterController.Instance != null && GroundCharacterController.Instance.IsActive)
+        {
+            return;
+        }
+
         CanvasGroup waypoint = FindCanvasGroup("Waypoint");
 
         if (hud.waypointActive == true & hud.scene != null)
@@ -931,6 +945,51 @@ public static class HudFunctions
         else
         {
             waypoint.gameObject.SetActive(false);
+        }
+    }
+
+    //Shows "WARNING SHIELDS ARE LOW" only when the current ship's shields
+    //are actually low. The prefab ships with the warning visible, so without
+    //this it stays on screen forever (reported as "always shows").
+    //Shown when shields are below 25% of rating. Ships without shields
+    //never show it.
+    public static void DisplayShieldWarning(Hud hud)
+    {
+        CanvasGroup warning = FindCanvasGroup("Warning");
+
+        if (warning == null)
+        {
+            return;
+        }
+
+        bool showWarning = false;
+
+        if (hud != null && hud.mainShip != null
+            && hud.mainShip.energyManagementSystem != null
+            && Time.timeScale != 0)
+        {
+            float rating = hud.mainShip.shieldRating;
+            float level = hud.mainShip.energyManagementSystem.shieldLevel;
+
+            if (rating > 0f && level < rating * 0.25f)
+            {
+                showWarning = true;
+            }
+        }
+
+        //Blink so it reads as a warning instead of static text.
+        float alpha = 0f;
+
+        if (showWarning == true)
+        {
+            alpha = (Mathf.Repeat(Time.unscaledTime, 1f) < 0.6f) ? 1f : 0.15f;
+        }
+
+        warning.alpha = alpha;
+
+        if (warning.gameObject.activeSelf != showWarning)
+        {
+            warning.gameObject.SetActive(showWarning);
         }
     }
 
@@ -1103,7 +1162,7 @@ public static class HudFunctions
     //This gets the hud script
     public static Hud GetHud()
     {
-        Hud hud = GameObject.FindFirstObjectByType<Hud>();
+        Hud hud = GameObject.FindAnyObjectByType<Hud>();
 
         return hud;
     }
@@ -1111,7 +1170,7 @@ public static class HudFunctions
     //This uses a string to find a specific text box
     public static Text FindText(string textBoxName)
     {
-        Hud hud = GameObject.FindFirstObjectByType<Hud>();
+        Hud hud = GameObject.FindAnyObjectByType<Hud>();
 
         Text text = null;
 
@@ -1148,7 +1207,7 @@ public static class HudFunctions
     //This uses a string to find a specific canvas group
     public static CanvasGroup FindCanvasGroup(string canvasGroupName)
     {
-        Hud hud = GameObject.FindFirstObjectByType<Hud>();
+        Hud hud = GameObject.FindAnyObjectByType<Hud>();
 
         CanvasGroup canvasGroup = null;
 
@@ -1185,7 +1244,7 @@ public static class HudFunctions
     //This uses a string to find a specific slider
     public static Slider FindSlider(string sliderName)
     {
-        Hud hud = GameObject.FindFirstObjectByType<Hud>();
+        Hud hud = GameObject.FindAnyObjectByType<Hud>();
 
         Slider slider = null;
 

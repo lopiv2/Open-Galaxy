@@ -133,7 +133,7 @@ public class GalaxyPlanetEntry : MonoBehaviour
 
     void Update()
     {
-        MissionManager missionManager = GameObject.FindFirstObjectByType<MissionManager>();
+        MissionManager missionManager = GameObject.FindAnyObjectByType<MissionManager>();
 
         if (missionManager == null || missionManager.running == false)
         {
@@ -509,6 +509,10 @@ public class GalaxyPlanetEntry : MonoBehaviour
         // Per-planet footstep surfaces (texture keyword -> audioclip).
         // Missing block means no footstep audio on this planet.
         streamer.footstepConfig = system != null ? system.footsteps : null;
+
+        // Per-planet landing dust tuning (tint, amount, audio). The dust
+        // colour family still comes from each tile's ground texture.
+        streamer.landingDust = system != null ? system.landingDust : null;
 
         // Per-planet vegetation (trees, bushes, dry shrubs...). Missing block
         // means the planet has no instanced vegetation at all.

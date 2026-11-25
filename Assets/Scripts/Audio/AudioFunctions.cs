@@ -592,7 +592,7 @@ public static class AudioFunctions
     //This clears all the current audio sources
     public static void DestroyAllAudioSources()
     {
-        AudioSource[] audioSources = GameObject.FindObjectsOfType<AudioSource>();
+        AudioSource[] audioSources = GameObject.FindObjectsByType<AudioSource>(FindObjectsInactive.Exclude);
 
         foreach (AudioSource audioSource in audioSources)
         {
@@ -694,7 +694,7 @@ public static class AudioFunctions
     {
         if (audioManager.scene == null)
         {
-            audioManager.scene = GameObject.FindFirstObjectByType<Scene>();
+            audioManager.scene = GameObject.FindAnyObjectByType<Scene>();
         }
     }
 
@@ -703,7 +703,7 @@ public static class AudioFunctions
     {
         Audio audio;
 
-        audio = GameObject.FindFirstObjectByType<Audio>();
+        audio = GameObject.FindAnyObjectByType<Audio>();
 
         return audio;
     }

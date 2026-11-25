@@ -51,7 +51,7 @@ public static class MissionBriefingFunctions
         }
 
         //This activates the mission briefing screen
-        MissionBriefing missionBriefing = GameObject.FindFirstObjectByType<MissionBriefing>();
+        MissionBriefing missionBriefing = GameObject.FindAnyObjectByType<MissionBriefing>();
 
         if (missionBriefing == null)
         {        

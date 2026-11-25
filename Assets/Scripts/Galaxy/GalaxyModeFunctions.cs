@@ -275,7 +275,7 @@ public static class GalaxyModeFunctions
             SelectedStartPlanet = planetName;
         }
 
-        MainMenu mainMenu = GameObject.FindFirstObjectByType<MainMenu>();
+        MainMenu mainMenu = GameObject.FindAnyObjectByType<MainMenu>();
 
         if (mainMenu != null)
         {

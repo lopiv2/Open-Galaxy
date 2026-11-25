@@ -25,6 +25,80 @@ public class PlanetNavigation : MonoBehaviour
     private int targetIndex = -1;
     private float hudTimer;
 
+    // Public access for the on-foot compass (GroundCompass).
+    public static PlanetNavigation Active { get { return active; } }
+    public bool HasPois { get { return location != null && location.pois != null && location.pois.Length > 0; } }
+    public int PoiCount { get { return HasPois ? location.pois.Length : 0; } }
+    public int SelectedPoiIndex { get { return targetIndex; } }
+
+    public string GetPoiName(int index)
+    {
+        if (!HasPois || index < 0 || index >= location.pois.Length || location.pois[index] == null)
+        {
+            return "";
+        }
+
+        return location.pois[index].name;
+    }
+
+    public bool IsPoiVisited(int index)
+    {
+        string name = GetPoiName(index);
+        return string.IsNullOrEmpty(name) == false && visited.Contains(name);
+    }
+
+    // World position of a POI. Y comes from the cached ground sample taken
+    // when the beacon was spawned (scene anchor is frozen while on planet).
+    public Vector3 GetPoiWorldPosition(int index)
+    {
+        Scene scene = SceneFunctions.GetScene();
+
+        if (scene == null || !HasPois || index < 0 || index >= location.pois.Length)
+        {
+            return Vector3.zero;
+        }
+
+        PlanetPOIEntry poi = location.pois[index];
+
+        if (poi == null)
+        {
+            return Vector3.zero;
+        }
+
+        float groundY = (index < poiGroundY.Count && !float.IsNaN(poiGroundY[index]))
+            ? poiGroundY[index]
+            : 0f;
+
+        return new Vector3(
+            scene.transform.position.x + poi.x,
+            scene.transform.position.y + groundY,
+            scene.transform.position.z + poi.z);
+    }
+
+    public void SelectPoi(int index)
+    {
+        if (!HasPois)
+        {
+            return;
+        }
+
+        int count = location.pois.Length;
+        targetIndex = ((index % count) + count) % count;
+        ApplyWaypoint();
+    }
+
+    // -1 previous, +1 next. Used by the compass Q/E (and H keeps working
+    // through CycleTarget).
+    public void StepPoi(int direction)
+    {
+        if (!HasPois)
+        {
+            return;
+        }
+
+        SelectPoi(targetIndex + (direction >= 0 ? 1 : -1));
+    }
+
     // Deterministic spawn XZ for the planet. Falls back to 0,0.
     public static Vector2 GetEntryGate(string planetName)
     {
@@ -105,16 +179,23 @@ public class PlanetNavigation : MonoBehaviour
     {
         location = GetLocationDef(planetName);
 
-        if (location == null || location.pois == null || location.pois.Length == 0)
-        {
-            Debug.Log("[PlanetNav] No POIs defined for " + planetName + " (flying free).");
-            yield break;
-        }
-
         Scene scene = SceneFunctions.GetScene();
 
         if (scene == null)
         {
+            yield break;
+        }
+
+        // Ambient fauna herds (JSON "creatures" block). This is independent of
+        // the POI navigation, so it also works on planets without POIs.
+        if (location != null && location.creatures != null && location.creatures.Length > 0)
+        {
+            PlanetCreatures.Begin(transform, scene, location);
+        }
+
+        if (location == null || location.pois == null || location.pois.Length == 0)
+        {
+            Debug.Log("[PlanetNav] No POIs defined for " + planetName + " (flying free).");
             yield break;
         }
 
@@ -411,13 +492,12 @@ public class PlanetNavigation : MonoBehaviour
 
     private void CycleTarget()
     {
-        if (location.pois.Length == 0)
+        if (!HasPois)
         {
             return;
         }
 
-        targetIndex = (targetIndex + 1) % location.pois.Length;
-        ApplyWaypoint();
+        StepPoi(1);
     }
 
     private void RetargetNearest(bool first)
@@ -522,8 +602,10 @@ public class PlanetNavigation : MonoBehaviour
             scene.transform.position.z + poi.z);
 
         hud.waypointActive = true;
-        hud.waypointTitle = "NAV: " + poi.name;
-        HudFunctions.AddToMissionLog("NAV: " + poi.name);
+        // The on-foot compass already names the selected POI, so the old
+        // "NAV: <POI>" floating title and mission-log line are redundant.
+        // The waypoint marker itself (and its distance) stays.
+        hud.waypointTitle = "";
     }
 
     private void SpawnBeacon(Scene scene, PlanetPOIEntry poi, float groundY)

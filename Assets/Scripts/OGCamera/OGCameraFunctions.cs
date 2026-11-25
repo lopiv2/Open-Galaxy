@@ -1346,7 +1346,7 @@ public class OGCameraFunctions : MonoBehaviour
     //This gets the film camera script and script gameobject
     public static OGCamera GetOGCamera()
     {
-        OGCamera ogCamera = FindFirstObjectByType<OGCamera>();
+        OGCamera ogCamera = FindAnyObjectByType<OGCamera>();
 
         return ogCamera;
     }

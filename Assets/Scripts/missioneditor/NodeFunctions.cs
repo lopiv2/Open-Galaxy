@@ -1243,7 +1243,7 @@ public class NodeFunctions : MonoBehaviour
     //This sets all drop down menus to the inputed text
     public static void SetDropDownMenu()
     {
-        Dropdown[] dropdowns = GameObject.FindObjectsOfType<Dropdown>();
+        Dropdown[] dropdowns = GameObject.FindObjectsByType<Dropdown>(FindObjectsInactive.Exclude);
 
         if (dropdowns != null)
         {

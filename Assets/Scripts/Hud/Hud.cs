@@ -51,6 +51,14 @@ public class Hud : MonoBehaviour
     void Update()
     {
         HudFunctions.FindMainShip(this);
+
+        // While walking, GroundCompass hides every ship-only widget. Skip these
+        // updates so they do not re-enable or reposition the hidden elements.
+        if (GroundCharacterController.Instance != null && GroundCharacterController.Instance.IsActive == true)
+        {
+            return;
+        }
+
         HudFunctions.DisplayShipInfo(this);
         HudFunctions.DisplayFrontRadar(this);
         HudFunctions.DisplayTargets(this);
@@ -60,5 +68,6 @@ public class Hud : MonoBehaviour
         HudFunctions.DisplayTargetInformation(this);
         HudFunctions.DisplayInterceptPoint(this);
         HudFunctions.DisplayWaypoint(this);
+        HudFunctions.DisplayShieldWarning(this);
     }
 }

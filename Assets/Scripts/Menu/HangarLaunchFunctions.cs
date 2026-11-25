@@ -19,7 +19,7 @@ public static class HangarLaunchFunctions
         GameObject hangar = GameObject.Instantiate(hangarGO) as GameObject;
 
         //This loads the hangar launch menu
-        HangarLaunch hangarLaunch = GameObject.FindFirstObjectByType<HangarLaunch>();
+        HangarLaunch hangarLaunch = GameObject.FindAnyObjectByType<HangarLaunch>();
 
         if (hangarLaunch == null)
         {

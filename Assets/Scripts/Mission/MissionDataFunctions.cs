@@ -9,7 +9,7 @@ public static class MissionDataFunctions
     //This loads or reloads mission data
     public static void LoadMissionData()
     {
-        MissionData missionData = GameObject.FindFirstObjectByType<MissionData>();
+        MissionData missionData = GameObject.FindAnyObjectByType<MissionData>();
 
         if (missionData == null)
         {

@@ -51,6 +51,21 @@ public class GroundCharacterController : MonoBehaviour
     private float cameraYaw;
     private float cameraPitch = 12f;
 
+    // Read by the HUD compass (GroundCompass) to know when to show itself.
+    public bool IsActive { get { return active; } }
+    public float ViewYaw { get { return cameraYaw; } }
+    public Vector3 CharacterPosition
+    {
+        get { return character != null ? character.transform.position : Vector3.zero; }
+    }
+
+    // Test hook: same path as pressing C (used by the foot test tool).
+    public bool EnterFootModeForTest()
+    {
+        TryEnterFootMode();
+        return active;
+    }
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
@@ -122,7 +137,15 @@ public class GroundCharacterController : MonoBehaviour
         {
             if (active == true)
             {
-                ExitFootMode();
+                // Boarding only works inside the blue ring around the ship.
+                if (IsInsideBoardingZone() == true)
+                {
+                    ExitFootMode();
+                }
+                else
+                {
+                    Log("Too far from the ship - step inside the blue ring to board.");
+                }
             }
             else
             {
@@ -137,6 +160,9 @@ public class GroundCharacterController : MonoBehaviour
             ShowHintIfNeeded();
             return;
         }
+
+        // The on-foot compass replaces the ship radar while walking.
+        GroundCompass.Ensure();
 
         // SoftLanding is disabled while on foot, so release it first. The next
         // Z press belongs to the ship and performs the actual takeoff.
@@ -313,7 +339,41 @@ public class GroundCharacterController : MonoBehaviour
 
         active = true;
         hintShown = false;
-        Log("On foot: WASD to move, Shift to run, C to return to the ship.");
+        Log("On foot: WASD to move, Shift to run, C inside the blue ring to board.");
+    }
+
+    // Boarding is only allowed inside the blue landing-zone ring around the
+    // landed ship. SoftLanding owns that radius so the visual matches the rule.
+    private bool IsInsideBoardingZone()
+    {
+        if (character == null)
+        {
+            return false;
+        }
+
+        Vector3 position = character.transform.position;
+        Scene scene = SceneFunctions.GetScene();
+        SoftLanding landing = disabledLanding;
+
+        if (landing == null && scene != null && scene.mainShip != null)
+        {
+            landing = scene.mainShip.GetComponent<SoftLanding>();
+        }
+
+        if (landing != null)
+        {
+            return landing.IsInsideLandingZone(position);
+        }
+
+        // Fallback if SoftLanding is missing for some reason.
+        if (scene == null || scene.mainShip == null)
+        {
+            return false;
+        }
+
+        Vector3 delta = position - scene.mainShip.transform.position;
+        delta.y = 0f;
+        return delta.sqrMagnitude <= 14f * 14f;
     }
 
     private void ExitFootMode()

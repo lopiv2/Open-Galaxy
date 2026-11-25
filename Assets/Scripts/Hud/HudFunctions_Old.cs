@@ -2675,7 +2675,7 @@ public static class HudFunctions_Old
     //This gets the HUD script
     public static Hud_Old GetHud()
     {
-        Hud_Old hud = GameObject.FindFirstObjectByType<Hud_Old>();
+        Hud_Old hud = GameObject.FindAnyObjectByType<Hud_Old>();
         return hud;
     }
 

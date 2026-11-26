@@ -81,7 +81,7 @@ public class OGCameraFunctions : MonoBehaviour
         //This makes sure the player layer is visible if needed
         if (ogCamera.viewType == "thirdperson")
         {
-            ViewPlayerLayer();
+            ViewPlayerLayer(ogCamera);
         }
 
         return ogCamera;
@@ -292,7 +292,7 @@ public class OGCameraFunctions : MonoBehaviour
             ogCamera.staticShotTaken = false;
         }
 
-        HidePlayerLayer();
+        HidePlayerLayer(ogCamera);
         SceneFunctions.DeactivateCockpits();
     }
 
@@ -363,13 +363,13 @@ public class OGCameraFunctions : MonoBehaviour
                 {
                     ogCamera.viewType = "thirdperson";
                     ResetOGCameraVaules();
-                    ViewPlayerLayer();
+                    ViewPlayerLayer(ogCamera);
                 }
                 else
                 {
                     ogCamera.viewType = "firstperson";
                     ResetOGCameraVaules();
-                    HidePlayerLayer();
+                    HidePlayerLayer(ogCamera);
                 }
 
                 ogCamera.toggleGameCameraPressTime = Time.time;
@@ -384,13 +384,13 @@ public class OGCameraFunctions : MonoBehaviour
                 {
                     ogCamera.viewType = "thirdperson";
                     ResetOGCameraVaules();
-                    ViewPlayerLayer();
+                    ViewPlayerLayer(ogCamera);
                 }
                 else
                 {
                     ogCamera.viewType = "firstperson";
                     ResetOGCameraVaules();
-                    HidePlayerLayer();
+                    HidePlayerLayer(ogCamera);
                 }
 
                 ogCamera.toggleGameCameraPressTime = Time.time;
@@ -591,6 +591,16 @@ public class OGCameraFunctions : MonoBehaviour
 
         if (ogCamera.targetShip != null)
         {
+            // En tercera persona el jugador debe seguir siendo visible aunque
+            // la vista de cabina haya ocultado la capa collision_player.
+            if (ogCamera.mainCamera != null)
+            {
+                Camera gameplayCamera = ogCamera.mainCamera.GetComponent<Camera>();
+                int playerLayer = LayerMask.NameToLayer("collision_player");
+                if (gameplayCamera != null && playerLayer >= 0 && (gameplayCamera.cullingMask & (1 << playerLayer)) == 0)
+                    ViewPlayerLayer(ogCamera);
+            }
+
             Ship ship = ogCamera.targetShip.GetComponent<Ship>();
 
             if (ship != null)
@@ -1319,28 +1329,54 @@ public class OGCameraFunctions : MonoBehaviour
         }
     }
 
+    // Obtiene la camara real que usa OGCamera. GameObject.Find puede devolver
+    // otra camara del menu con el mismo nombre, por eso se prefiere la referencia
+    // del componente OGCamera cuando esta disponible.
+    private static Camera GetGameplayCamera(OGCamera ogCamera)
+    {
+        if (ogCamera != null && ogCamera.mainCamera != null)
+        {
+            Camera camera = ogCamera.mainCamera.GetComponent<Camera>();
+            if (camera != null)
+                return camera;
+        }
+
+        GameObject mainCameraGO = GameObject.Find("Main Camera");
+        return mainCameraGO == null ? null : mainCameraGO.GetComponent<Camera>();
+    }
+
+    private static void SetPlayerLayerVisible(OGCamera ogCamera, bool visible)
+    {
+        Camera mainCamera = GetGameplayCamera(ogCamera);
+
+        if (mainCamera != null)
+        {
+            mainCamera.cullingMask = visible
+                ? LayerMask.GetMask("Default", "collision_player", "collision_asteroid", "collision01", "collision02", "collision03", "collision04", "collision05", "collision06", "collision07", "collision08", "collision09", "collision10", "collision11", "collision12", "collision13", "collision14", "collision15", "collision16")
+                : LayerMask.GetMask("Default", "collision_asteroid", "collision01", "collision02", "collision03", "collision04", "collision05", "collision06", "collision07", "collision08", "collision09", "collision10", "collision11", "collision12", "collision13", "collision14", "collision15", "collision16");
+        }
+    }
+
     //This makes the player layer visible
     public static void ViewPlayerLayer()
     {
-        GameObject mainCameraGO = GameObject.Find("Main Camera");
+        ViewPlayerLayer(GetOGCamera());
+    }
 
-        if (mainCameraGO != null)
-        {
-            Camera mainCamera = mainCameraGO.GetComponent<Camera>();
-            mainCamera.cullingMask = LayerMask.GetMask("Default", "collision_player", "collision_asteroid", "collision01", "collision02", "collision03", "collision04", "collision05", "collision06", "collision07", "collision08", "collision09", "collision10", "collision11", "collision12", "collision13", "collision14", "collision15", "collision16");
-        }
+    public static void ViewPlayerLayer(OGCamera ogCamera)
+    {
+        SetPlayerLayerVisible(ogCamera, true);
     }
 
     //This makes the player layer invisible
     public static void HidePlayerLayer()
     {
-        GameObject mainCameraGO = GameObject.Find("Main Camera");
+        HidePlayerLayer(GetOGCamera());
+    }
 
-        if (mainCameraGO != null)
-        {
-            Camera mainCamera = mainCameraGO.GetComponent<Camera>();
-            mainCamera.cullingMask = LayerMask.GetMask("Default", "collision_asteroid", "collision01", "collision02", "collision03", "collision04", "collision05", "collision06", "collision07", "collision08", "collision09", "collision10", "collision11", "collision12", "collision13", "collision14", "collision15", "collision16");
-        }
+    public static void HidePlayerLayer(OGCamera ogCamera)
+    {
+        SetPlayerLayerVisible(ogCamera, false);
     }
 
     //This gets the film camera script and script gameobject

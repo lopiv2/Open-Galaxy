@@ -286,7 +286,16 @@ public static class EnergyWeaponFunctions
 
             collisionLayers = LayerMask.GetMask("collision_player", "collision_asteroid", "collision01", "collision02", "collision03", "collision04", "collision05", "collision06", "collision07", "collision08", "collision09", "collision10", "collision11", "collision12", "collision13", "collision14", "collision15", "collision16", "invisible");
 
-            collisionLayers &= ~(1 << ((GetLayerInt(allegiance.allegiance, layerNames))));
+            if (allegiance == null)
+            {
+                //Unknown allegiance (no entry in Allegiances.json): fall back to the
+                //default mask instead of throwing. See PENDING_SHIP_ALLEGIANCES.md.
+                WarnUnknownAllegiance(ship.allegiance);
+            }
+            else
+            {
+                collisionLayers &= ~(1 << ((GetLayerInt(allegiance.allegiance, layerNames))));
+            }
         }
         else
         {
@@ -294,6 +303,19 @@ public static class EnergyWeaponFunctions
         }
 
         return collisionLayers;
+    }
+
+    private static readonly HashSet<string> unknownAllegiancesWarned = new HashSet<string>();
+
+    //Warns once per unknown allegiance instead of throwing every frame.
+    private static void WarnUnknownAllegiance(string allegiance)
+    {
+        string key = string.IsNullOrEmpty(allegiance) ? "(empty)" : allegiance;
+
+        if (unknownAllegiancesWarned.Add(key))
+        {
+            Debug.LogWarning("EnergyWeaponFunctions: unknown allegiance '" + key + "'. Using default laser collision mask. Add it to Allegiances.json (see PENDING_SHIP_ALLEGIANCES.md).");
+        }
     }
 
     //This gets the int for the laser collision layers

@@ -1160,9 +1160,22 @@ public static class SceneFunctions
                     i++;
                 }
 
-                shipGO.layer = i + 8;
+                if (allegianceScript == null)
+                {
+                    //Unknown allegiance (no entry in Allegiances.json): keep the ship on
+                    //the Default layer instead of assigning a bogus team layer.
+                    //See PENDING_SHIP_ALLEGIANCES.md.
+                    Debug.LogWarning("SceneFunctions: unknown allegiance '" + allegiance + "'. Ship kept on Default layer. Add it to Allegiances.json.");
+                    shipGO.layer = LayerMask.NameToLayer("Default");
 
-                GameObjectUtils.SetLayerAllChildren(shipGO.transform, i + 8);
+                    GameObjectUtils.SetLayerAllChildren(shipGO.transform, LayerMask.NameToLayer("Default"));
+                }
+                else
+                {
+                    shipGO.layer = i + 8;
+
+                    GameObjectUtils.SetLayerAllChildren(shipGO.transform, i + 8);
+                }
 
             }
             else
@@ -2348,6 +2361,11 @@ public static class SceneFunctions
                 cockpitExists = true;
                 break;
             }
+        }
+
+        if (cockpitExists == false)
+        {
+            Debug.LogWarning("[Cockpit] No cockpit prefab called '" + name + "' found in " + OGGetAddress.cockpits);
         }
 
         if (cockpitExists == true)

@@ -127,6 +127,13 @@ public static class GalaxyModeFunctions
                 continue;
             }
 
+            // A ship can only be flown if its cockpit actually exists in Resources.
+            // Otherwise it shows up in the menu but fails to load when the player tries to fly it.
+            if (Resources.Load<GameObject>(OGGetAddress.cockpits + shipType.cockpitPrefab) == null)
+            {
+                continue;
+            }
+
             result.Add(shipType);
         }
 

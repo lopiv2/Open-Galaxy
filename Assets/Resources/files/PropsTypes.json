@@ -1,18 +1,31 @@
 {
-    "propTypesData": [
-        {
-            "type": "Sandcrawler",
-            "displayName": "Sandcrawler",
-            "folder": "objects/vehicles/",
-            "prefab": "Sandcrawler",
-            "targetLength": 40.0
-        },
-        {
-            "type": "TatooineHouse",
-            "displayName": "Tatooine House",
-            "folder": "objects/buildings/",
-            "prefab": "TatooineHouse",
-            "targetLength": 12.0
-        }
-    ]
+  "propTypesData": [
+    {
+      "type": "Sandcrawler",
+      "displayName": "Sandcrawler",
+      "folder": "objects/vehicles/",
+      "prefab": "Sandcrawler",
+      "targetLength": 40.0,
+      "category": "vehicle",
+      "tags": ["landmark", "vehicle"]
+    },
+    {
+      "type": "TatooineHouse",
+      "displayName": "Tatooine House",
+      "folder": "objects/buildings/",
+      "prefab": "TatooineHouse",
+      "targetLength": 12.0,
+      "category": "building",
+      "tags": ["settlement", "building"]
+    },
+    {
+      "type": "Tatooine_Moisture_Vaporator",
+      "displayName": "Tatooine_Moisture_Vaporator",
+      "folder": "objects/props/",
+      "prefab": "Tatooine_Moisture_Vaporator",
+      "targetLength": 5.5,
+      "category": "prop",
+      "tags": ["settlement", "building"]
+    }
+  ]
 }

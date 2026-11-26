@@ -9,6 +9,10 @@ public class PropType
     // Canon length in meters. The longest horizontal extent is scaled to
     // this (native FBX sizes vary). <= 0 keeps the native size.
     public float targetLength;
+    // Optional catalog metadata used by the terrain preview tool.
+    // Examples: "building", "vehicle", "landmark".
+    public string category;
+    public string[] tags;
 }
 
 [System.Serializable]

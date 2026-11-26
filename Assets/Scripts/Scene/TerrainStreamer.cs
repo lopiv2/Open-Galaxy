@@ -77,6 +77,10 @@ public class TerrainStreamer : MonoBehaviour
     public TerrainOverlay[] overlayConfig;
     [Tooltip("Planet name, used to connect path overlays to PlanetPOIs.json.")]
     public string planetName;
+    // Editor-only override: the terrain preview tool feeds its unsaved POI
+    // draft here so "poiPath" overlays follow edited waypoints live. Not
+    // serialized into scenes; the game always reads PlanetPOIs.json.
+    [System.NonSerialized] public PlanetPOILocation poiOverride;
     [Header("Footsteps")]
     [Tooltip("Per-planet footstep surfaces from StarSystems.json (texture keyword -> audioclip).")]
     public FootstepSurface[] footstepConfig;
@@ -84,7 +88,7 @@ public class TerrainStreamer : MonoBehaviour
     [Tooltip("Per-planet landing dust tuning from StarSystems.json (tint / amount / audio).")]
     public LandingDustSettings landingDust;
     private const int MaxOverlaySlots = 3;
-    private const int MaxPathSegments = 16;
+    private const int MaxPathSegments = 24;
 
     private class OverlayRuntime
     {
@@ -100,29 +104,47 @@ public class TerrainStreamer : MonoBehaviour
         public readonly Vector4[] segments = new Vector4[MaxPathSegments];
         public int segmentCount;
         public string footstepClip;
+        public float routeCurviness;
+        public float routeMaxDetour;
+        public float routeWallClearance;
+        public int routeSeed;
+        public string routeStatus = "";
     }
 
     // Precomputed road cost for the rectangle a leg may wander through.
-    // Evaluating the terrain directly for every dynamic-programming edge is
-    // far too expensive, so the detailed sampling happens once per cell.
+    // Evaluating the terrain directly for every A* edge is far too expensive,
+    // so the detailed sampling happens once per cell. Steep walls are marked
+    // blocked; mesa tops and canyon floors stay usable, and the intermediate
+    // slope bands are treated as ramps.
     private class RouteCostField
     {
+        private readonly TerrainStreamer owner;
         private readonly float originX;
         private readonly float originZ;
         private readonly float cellSize;
         private readonly int width;
         private readonly int height;
         private readonly float[] costs;
+        private readonly bool[] blocked;
+        private readonly bool[] ramps;
+
+        public int Width => width;
+        public int Height => height;
+        public float CellSize => cellSize;
 
         public RouteCostField(TerrainStreamer owner, Vector2 start, Vector2 end,
-            float maxOffset, float requestedCellSize)
+            float maxOffset, float requestedCellSize, float clearance)
         {
+            this.owner = owner;
             Vector2 direction = (end - start).normalized;
             Vector2 perpendicular = new Vector2(-direction.y, direction.x);
-            Vector2 a = start + perpendicular * maxOffset;
-            Vector2 b = start - perpendicular * maxOffset;
-            Vector2 c = end + perpendicular * maxOffset;
-            Vector2 d = end - perpendicular * maxOffset;
+            // Leave room before/after the leg so a wall that continues past a
+            // waypoint can still be walked around instead of crossed.
+            Vector2 alongMargin = direction * Mathf.Max(0f, maxOffset) * 0.5f;
+            Vector2 a = start + perpendicular * maxOffset - alongMargin;
+            Vector2 b = start - perpendicular * maxOffset - alongMargin;
+            Vector2 c = end + perpendicular * maxOffset + alongMargin;
+            Vector2 d = end - perpendicular * maxOffset + alongMargin;
 
             float minX = Mathf.Min(Mathf.Min(a.x, b.x), Mathf.Min(c.x, d.x));
             float maxX = Mathf.Max(Mathf.Max(a.x, b.x), Mathf.Max(c.x, d.x));
@@ -132,23 +154,75 @@ public class TerrainStreamer : MonoBehaviour
             float spanX = maxX - minX;
             float spanZ = maxZ - minZ;
             cellSize = Mathf.Max(requestedCellSize,
-                Mathf.Max(spanX, spanZ) / 159f);
+                Mathf.Max(spanX, spanZ) / 239f);
 
             const int margin = 3;
-            width = Mathf.Clamp(Mathf.CeilToInt(spanX / cellSize) + margin * 2, 4, 160);
-            height = Mathf.Clamp(Mathf.CeilToInt(spanZ / cellSize) + margin * 2, 4, 160);
+            width = Mathf.Clamp(Mathf.CeilToInt(spanX / cellSize) + margin * 2, 4, 240);
+            height = Mathf.Clamp(Mathf.CeilToInt(spanZ / cellSize) + margin * 2, 4, 240);
 
             originX = (minX + maxX) * 0.5f - (width - 1) * cellSize * 0.5f;
             originZ = (minZ + maxZ) * 0.5f - (height - 1) * cellSize * 0.5f;
             costs = new float[width * height];
+            ramps = new bool[width * height];
+            bool[] walls = new bool[width * height];
 
             for (int z = 0; z < height; z++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    costs[z * width + x] = owner.CliffRouteCost(
-                        originX + x * cellSize,
-                        originZ + z * cellSize);
+                    RouteTerrainSample sample = owner.SampleRouteTerrain(
+                        originX + (x + 0.5f) * cellSize,
+                        originZ + (z + 0.5f) * cellSize);
+                    int index = z * width + x;
+                    costs[index] = sample.cost;
+                    ramps[index] = sample.ramp;
+                    walls[index] = sample.blocked;
+                }
+            }
+
+            int clearanceCells = Mathf.Clamp(
+                Mathf.CeilToInt(Mathf.Max(0f, clearance) / cellSize), 0, 8);
+
+            if (clearanceCells <= 0)
+            {
+                blocked = walls;
+            }
+            else
+            {
+                blocked = new bool[walls.Length];
+
+                for (int z = 0; z < height; z++)
+                {
+                    for (int x = 0; x < width; x++)
+                    {
+                        int index = z * width + x;
+                        if (!walls[index])
+                            continue;
+
+                        for (int dz = -clearanceCells; dz <= clearanceCells; dz++)
+                        {
+                            for (int dx = -clearanceCells; dx <= clearanceCells; dx++)
+                            {
+                                int nx = x + dx;
+                                int nz = z + dz;
+                                if (nx < 0 || nz < 0 || nx >= width || nz >= height)
+                                    continue;
+
+                                int neighbour = nz * width + nx;
+                                // Do not let clearance swallow a ramp: a narrow
+                                // ramp is the only legal way down a mesa face.
+                                if (!ramps[neighbour])
+                                    blocked[neighbour] = true;
+                            }
+                        }
+                    }
+                }
+
+                // The wall cells themselves always stay blocked.
+                for (int i = 0; i < blocked.Length; i++)
+                {
+                    if (walls[i])
+                        blocked[i] = true;
                 }
             }
         }
@@ -167,6 +241,119 @@ public class TerrainStreamer : MonoBehaviour
                 Mathf.Lerp(costs[index], costs[index + 1], tx),
                 Mathf.Lerp(costs[index + width], costs[index + width + 1], tx),
                 tz);
+        }
+
+        public bool IsBlockedCell(int x, int z)
+        {
+            return blocked[z * width + x];
+        }
+
+        public float CellCost(int x, int z)
+        {
+            return costs[z * width + x];
+        }
+
+        public Vector2 CellCenter(int x, int z)
+        {
+            return new Vector2(
+                originX + (x + 0.5f) * cellSize,
+                originZ + (z + 0.5f) * cellSize);
+        }
+
+        public void WorldToCell(Vector2 world, out int x, out int z)
+        {
+            x = Mathf.Clamp(
+                Mathf.FloorToInt((world.x - originX) / cellSize), 0, width - 1);
+            z = Mathf.Clamp(
+                Mathf.FloorToInt((world.y - originZ) / cellSize), 0, height - 1);
+        }
+
+        // Fast grid query for A* and path simplification.
+        public bool IsBlockedWorld(float worldX, float worldZ)
+        {
+            WorldToCell(new Vector2(worldX, worldZ), out int x, out int z);
+            return IsBlockedCell(x, z);
+        }
+
+        // Exact query used only by the final validation pass. Sampling the
+        // full terrain for every A* edge made the preview take minutes.
+        public bool IsBlockedWorldExact(float worldX, float worldZ)
+        {
+            if (owner != null && owner.SampleRouteTerrain(worldX, worldZ).blocked)
+                return true;
+
+            WorldToCell(new Vector2(worldX, worldZ), out int x, out int z);
+            return IsBlockedCell(x, z);
+        }
+    }
+
+    private struct RouteTerrainSample
+    {
+        public float cost;
+        public bool blocked;
+        public bool ramp;
+    }
+
+    private struct RouteHeapEntry
+    {
+        public int node;
+        public float priority;
+    }
+
+    private class RouteMinHeap
+    {
+        private readonly List<RouteHeapEntry> items = new List<RouteHeapEntry>();
+
+        public int Count => items.Count;
+
+        public void Push(int node, float priority)
+        {
+            items.Add(new RouteHeapEntry { node = node, priority = priority });
+            int index = items.Count - 1;
+
+            while (index > 0)
+            {
+                int parent = (index - 1) / 2;
+                if (items[parent].priority <= items[index].priority)
+                    break;
+
+                RouteHeapEntry swap = items[parent];
+                items[parent] = items[index];
+                items[index] = swap;
+                index = parent;
+            }
+        }
+
+        public int Pop(out float priority)
+        {
+            RouteHeapEntry root = items[0];
+            int last = items.Count - 1;
+            items[0] = items[last];
+            items.RemoveAt(last);
+            priority = root.priority;
+
+            int index = 0;
+
+            while (true)
+            {
+                int left = index * 2 + 1;
+                int right = left + 1;
+                int smallest = index;
+
+                if (left < items.Count && items[left].priority < items[smallest].priority)
+                    smallest = left;
+                if (right < items.Count && items[right].priority < items[smallest].priority)
+                    smallest = right;
+                if (smallest == index)
+                    break;
+
+                RouteHeapEntry swap = items[index];
+                items[index] = items[smallest];
+                items[smallest] = swap;
+                index = smallest;
+            }
+
+            return root.node;
         }
     }
 
@@ -678,6 +865,18 @@ public class TerrainStreamer : MonoBehaviour
                 0f,
                 0f);
 
+            runtime.routeCurviness = ResolveCurviness(config);
+            runtime.routeMaxDetour = ResolveMaxDetour(config);
+            float routeWidth = config.width > 0f ? config.width : 3f;
+            float routeFeather = config.feather > 0f ? config.feather : 4f;
+            float extraClearance = config.wallClearance > 0f
+                ? config.wallClearance
+                : 6f;
+            // Keep the whole painted strip, not only its centreline, off walls.
+            runtime.routeWallClearance = extraClearance
+                + (routeWidth + routeFeather) * 0.5f;
+            runtime.routeSeed = Mathf.RoundToInt(config.seedOffset * 1000f);
+
             if (connectPois)
                 LoadOverlayPoiSegments(runtime);
             else if (mode == 2)
@@ -733,6 +932,67 @@ public class TerrainStreamer : MonoBehaviour
                 return 3;
             default:
                 return 0;
+        }
+    }
+
+    private static string NormalizeCurvePreset(string preset)
+    {
+        string lower = (preset ?? string.Empty).Trim().ToLowerInvariant();
+
+        switch (lower)
+        {
+            case "straight":
+            case "recto":
+                return "straight";
+            case "winding":
+            case "serpenteante":
+            case "curvo":
+                return "winding";
+            default:
+                return "balanced";
+        }
+    }
+
+    private static float PresetCurviness(string preset)
+    {
+        switch (NormalizeCurvePreset(preset))
+        {
+            case "straight":
+                return 0.05f;
+            case "winding":
+                return 0.80f;
+            default:
+                return 0.35f;
+        }
+    }
+
+    private static float ResolveCurviness(TerrainOverlay config)
+    {
+        // Old JSONs have none of these fields. Treat 0 (without the explicit
+        // flag) as "unset" so they still get the preset curve instead of
+        // silently becoming perfectly straight.
+        if (config.curvinessSet && config.curviness >= 0f)
+            return Mathf.Clamp01(config.curviness);
+
+        if (config.curviness > 0f)
+            return Mathf.Clamp01(config.curviness);
+
+        return PresetCurviness(config.curvePreset);
+    }
+
+    private static float ResolveMaxDetour(TerrainOverlay config)
+    {
+        if (config.maxDetour > 0f)
+            return Mathf.Max(200f, config.maxDetour);
+
+        switch (NormalizeCurvePreset(config.curvePreset))
+        {
+            case "straight":
+                return 2000f;
+            case "winding":
+                return 3600f;
+            default:
+                return 2600f;
         }
     }
 
@@ -922,15 +1182,30 @@ public class TerrainStreamer : MonoBehaviour
     }
 
     // Sampling distance used to detect near-vertical mesa and canyon walls.
-    private const float RouteWallSample = 70f;
+    // 30 m catches the actual cliff face; 70 m averaged a 30 m wall down into
+    // a harmless ramp, which is why roads used to cross it.
+    private const float RouteWallSample = 30f;
+    // Slopes below this are flat enough for a road. The band up to the wall
+    // threshold is treated as a ramp; anything steeper is a wall. The wall
+    // threshold is deliberately above normal mountain slopes so routes are
+    // not cut off by every steep dune.
+    private const float RouteRampSlopeStart = 0.15f;
+    private const float RouteWallSlopeStart = 0.45f;
+    // A* cell size. 45 m keeps the road away from narrow walls while staying
+    // cheap enough to evaluate at load time.
+    private const float RouteCellSize = 45f;
+    private const float RouteMinCost = 0.15f;
 
     // Lower cost means better road terrain. Mesa tops and canyon floors are
-    // usable; the steep edges between them are not. The sand apron is the
-    // cheapest place to run a road along a cliff foot.
-    private float CliffRouteCost(float worldX, float worldZ)
+    // usable; steep walls are blocked. The intermediate slope band is a ramp
+    // and stays passable at a higher cost, so a road can climb down to a
+    // canyon floor without crossing a vertical face.
+    private RouteTerrainSample SampleRouteTerrain(float worldX, float worldZ)
     {
+        RouteTerrainSample sample = new RouteTerrainSample { cost = 1f };
+
         if (terrainGenerator == null)
-            return 1f;
+            return sample;
 
         Vector4 masks = terrainGenerator.SampleCliffRouteMasks(worldX, worldZ, 120f);
         float region = masks.y;
@@ -938,10 +1213,8 @@ public class TerrainStreamer : MonoBehaviour
         float canyon = masks.w;
         float apron = masks.x;
 
-        // Mesa and canyon walls are the steep parts of the real terrain, not
-        // every wiggle of the noise masks. Measure the actual height slope
-        // across a short span so roads may run on top or along a canyon floor
-        // but never climb the vertical sides.
+        // Measure the actual height slope across a short span. This is more
+        // reliable than the masks alone, which also cover broad, flat tops.
         float heightXPlus = terrainGenerator.GetHeightAtLocalPosition(
             Vector2Int.zero, new Vector3(worldX + RouteWallSample, 0f, worldZ));
         float heightXMinus = terrainGenerator.GetHeightAtLocalPosition(
@@ -954,172 +1227,141 @@ public class TerrainStreamer : MonoBehaviour
         float slope = Mathf.Max(
             Mathf.Abs(heightXPlus - heightXMinus),
             Mathf.Abs(heightZPlus - heightZMinus)) / (RouteWallSample * 2f);
-        float wall = Mathf.InverseLerp(0.25f, 0.85f, slope) * region;
-        float cost = 0.65f + region * 0.25f + plateau * 1.2f
-            - apron * 0.6f - canyon * 0.8f + wall * 32f;
 
-        return Mathf.Max(0.15f, cost);
+        // Only the actual mesa/canyon layer counts as a cliff. The base
+        // mountains can be steep too, but they are not vertical walls and
+        // must not fragment every cross-country route.
+        bool cliffFeature = region > 0.05f
+            && (plateau > 0.02f || canyon > 0.02f);
+
+        sample.blocked = cliffFeature && slope >= RouteWallSlopeStart;
+        sample.ramp = !sample.blocked && cliffFeature
+            && slope >= RouteRampSlopeStart;
+
+        float cost = 0.70f + region * 0.20f + plateau * 0.15f
+            - apron * 0.55f - canyon * 0.20f;
+
+        if (sample.ramp)
+        {
+            float rampT = Mathf.InverseLerp(
+                RouteRampSlopeStart, RouteWallSlopeStart, slope);
+            cost += Mathf.Lerp(2.2f, 7.5f, rampT);
+        }
+
+        if (sample.blocked)
+            cost = 40f;
+
+        sample.cost = Mathf.Max(RouteMinCost, cost);
+        return sample;
     }
 
-    // Integrated cost of a straight piece of road. A single expensive sample
-    // (a wall crossing) is enough to reject the shortcut.
-    private float SegmentRouteCost(RouteCostField field, Vector2 start, Vector2 end)
+    // A straight piece of road is safe when no interior sample lands in a
+    // blocked (wall or clearance) cell. Endpoints are allowed: a POI can sit
+    // right at the edge of a mesa, and the road itself still must not cut the
+    // wall between its waypoints.
+    private static bool IsRouteSegmentSafe(
+        RouteCostField field, Vector2 start, Vector2 end, bool exact = false)
     {
         float distance = Vector2.Distance(start, end);
 
         if (distance < 1f)
-            return 0f;
+            return true;
 
-        int steps = Mathf.Clamp(Mathf.CeilToInt(distance / 70f), 3, 72);
-        float total = 0f;
-        float peak = 0f;
+        int steps = Mathf.Clamp(
+            Mathf.CeilToInt(distance / Mathf.Max(4f, field.CellSize * 0.35f)),
+            4, 240);
 
-        for (int i = 0; i <= steps; i++)
+        for (int i = 1; i < steps; i++)
         {
-            Vector2 point = Vector2.Lerp(start, end, i / (float)steps);
-            float cost = field.Sample(point.x, point.y);
-            total += cost;
+            float t = i / (float)steps;
 
-            if (cost > peak)
-                peak = cost;
+            if (t < 0.02f || t > 0.98f)
+                continue;
+
+            Vector2 point = Vector2.Lerp(start, end, t);
+            bool blocked = exact
+                ? field.IsBlockedWorldExact(point.x, point.y)
+                : field.IsBlockedWorld(point.x, point.y);
+
+            if (blocked)
+                return false;
         }
 
-        float average = total / (steps + 1);
-        return (average + Mathf.Max(0f, peak - 4f) * 1.6f) * distance;
+        return true;
     }
 
-    // Builds a curved route by choosing a lateral offset at each station along
-    // the straight leg. Dynamic programming prices the actual ground between
-    // stations, so the road bends around mesa walls and follows canyon floors
-    // instead of jumping across them.
-    private List<Vector2> BuildCliffAwareRoute(Vector2 start, Vector2 end, int maxSegments)
+    private static Vector2 FindLastSafePoint(
+        RouteCostField field, Vector2 start, Vector2 end)
     {
-        List<Vector2> route = new List<Vector2> { start, end };
-        Vector2 delta = end - start;
-        float distance = delta.magnitude;
+        float distance = Vector2.Distance(start, end);
 
-        if (terrainGenerator == null || distance < 1f || maxSegments < 2)
-            return route;
+        if (distance < 1f)
+            return start;
 
-        Vector2 direction = delta / distance;
-        Vector2 perpendicular = new Vector2(-direction.y, direction.x);
+        int steps = Mathf.Clamp(
+            Mathf.CeilToInt(distance / Mathf.Max(4f, field.CellSize * 0.35f)),
+            4, 240);
 
-        int stationCount = Mathf.Clamp(Mathf.CeilToInt(distance / 700f) + 1, 5, 12);
-        int sampleCount = 21;
-        int zeroIndex = sampleCount / 2;
-        float maxOffset = Mathf.Min(2400f, Mathf.Max(700f, distance * 0.9f));
-        float[] offsets = new float[sampleCount];
+        Vector2 safe = start;
 
-        for (int i = 0; i < sampleCount; i++)
-            offsets[i] = Mathf.Lerp(-maxOffset, maxOffset, i / (float)(sampleCount - 1));
-
-        RouteCostField field = new RouteCostField(
-            this, start, end, maxOffset + RouteWallSample * 2f, 80f);
-
-        Vector2[,] points = new Vector2[stationCount, sampleCount];
-        float[,] pointCost = new float[stationCount, sampleCount];
-
-        for (int station = 0; station < stationCount; station++)
+        for (int i = 1; i < steps; i++)
         {
-            Vector2 centre = start + delta * (station / (float)(stationCount - 1));
+            Vector2 point = Vector2.Lerp(start, end, i / (float)steps);
 
-            for (int sample = 0; sample < sampleCount; sample++)
+            if (field.IsBlockedWorldExact(point.x, point.y))
+                break;
+
+            safe = point;
+        }
+
+        return safe;
+    }
+
+    // Greedy line-of-sight simplification: keep the farthest point that can
+    // still be reached without touching a wall. This removes A*'s grid
+    // staircase without ever cutting a corner through a cliff.
+    private static List<Vector2> SimplifyRoute(
+        List<Vector2> points, int maxSegments, RouteCostField field)
+    {
+        if (points == null || points.Count <= 2)
+            return points;
+
+        List<Vector2> simplified = new List<Vector2> { points[0] };
+        int index = 0;
+
+        while (index < points.Count - 1)
+        {
+            int farthest = index + 1;
+
+            for (int candidate = points.Count - 1; candidate > index + 1; candidate--)
             {
-                Vector2 point = centre + perpendicular * offsets[sample];
-                points[station, sample] = point;
-                pointCost[station, sample] = field.Sample(point.x, point.y)
-                    + Mathf.Abs(offsets[sample]) * 0.0002f;
+                if (!IsRouteSegmentSafe(field, points[index], points[candidate]))
+                    continue;
+
+                farthest = candidate;
+                break;
             }
+
+            simplified.Add(points[farthest]);
+            index = farthest;
         }
 
-        float[,,] edgeCost = new float[stationCount - 1, sampleCount, sampleCount];
-
-        for (int station = 1; station < stationCount; station++)
-        {
-            for (int previous = 0; previous < sampleCount; previous++)
-            {
-                for (int sample = 0; sample < sampleCount; sample++)
-                {
-                    edgeCost[station - 1, previous, sample] =
-                        SegmentRouteCost(field, points[station - 1, previous], points[station, sample]);
-                }
-            }
-        }
-
-        float[,] cost = new float[stationCount, sampleCount];
-        int[,] from = new int[stationCount, sampleCount];
-
-        for (int sample = 0; sample < sampleCount; sample++)
-            cost[0, sample] = sample == zeroIndex ? pointCost[0, sample] : float.MaxValue;
-
-        for (int station = 1; station < stationCount; station++)
-        {
-            for (int sample = 0; sample < sampleCount; sample++)
-            {
-                float bestPrevious = float.MaxValue;
-                int bestIndex = zeroIndex;
-
-                for (int previous = 0; previous < sampleCount; previous++)
-                {
-                    if (cost[station - 1, previous] >= float.MaxValue * 0.5f)
-                        continue;
-
-                    float candidate = cost[station - 1, previous]
-                        + edgeCost[station - 1, previous, sample];
-
-                    if (station > 1)
-                    {
-                        int before = from[station - 1, previous];
-                        float lastBend = offsets[previous] - offsets[before];
-                        float nextBend = offsets[sample] - offsets[previous];
-                        candidate += Mathf.Abs(nextBend - lastBend) * 0.9f;
-                    }
-
-                    if (candidate < bestPrevious)
-                    {
-                        bestPrevious = candidate;
-                        bestIndex = previous;
-                    }
-                }
-
-                cost[station, sample] = bestPrevious + pointCost[station, sample];
-                from[station, sample] = bestIndex;
-            }
-        }
-
-        // The road must finish exactly at the target waypoint.
-        for (int sample = 0; sample < sampleCount; sample++)
-        {
-            if (sample != zeroIndex)
-                cost[stationCount - 1, sample] = float.MaxValue;
-        }
-
-        int[] chosen = new int[stationCount];
-        chosen[stationCount - 1] = zeroIndex;
-
-        for (int station = stationCount - 1; station > 0; station--)
-            chosen[station - 1] = from[station, chosen[station]];
-
-        route.Clear();
-
-        for (int station = 0; station < stationCount; station++)
-            route.Add(points[station, chosen[station]]);
-
-        route[0] = start;
-        route[route.Count - 1] = end;
-
-        // Keep only the bends that actually avoid cliffs, within the segment
-        // budget available to this leg.
-        while (route.Count - 1 > maxSegments)
+        // Rarely, a very twisted safe route needs more segments than the
+        // shader budget. Remove the cheapest safe bend until it fits.
+        while (simplified.Count - 1 > maxSegments)
         {
             float bestPenalty = float.MaxValue;
             int bestIndex = -1;
 
-            for (int i = 1; i < route.Count - 1; i++)
+            for (int i = 1; i < simplified.Count - 1; i++)
             {
-                float penalty = SegmentRouteCost(field, route[i - 1], route[i + 1])
-                    - SegmentRouteCost(field, route[i - 1], route[i])
-                    - SegmentRouteCost(field, route[i], route[i + 1]);
+                if (!IsRouteSegmentSafe(field, simplified[i - 1], simplified[i + 1]))
+                    continue;
+
+                float before = Vector2.Distance(simplified[i - 1], simplified[i])
+                    + Vector2.Distance(simplified[i], simplified[i + 1]);
+                float after = Vector2.Distance(simplified[i - 1], simplified[i + 1]);
+                float penalty = after - before;
 
                 if (penalty < bestPenalty)
                 {
@@ -1131,10 +1373,436 @@ public class TerrainStreamer : MonoBehaviour
             if (bestIndex < 0)
                 break;
 
-            route.RemoveAt(bestIndex);
+            simplified.RemoveAt(bestIndex);
+        }
+
+        return simplified;
+    }
+
+    // Evenly re-samples a safe polyline. A straight leg simplifies to just
+    // two points, and without interior points ApplyCurviness would have
+    // nowhere to push a bend. Sampling along the existing safe polyline keeps
+    // the result inside the already validated corridor.
+    private static List<Vector2> ResampleRoute(
+        List<Vector2> route, int pointCount)
+    {
+        if (route == null || route.Count < 2 || pointCount < 3)
+            return route;
+
+        if (route.Count >= pointCount)
+            return route;
+
+        float[] cumulative = new float[route.Count];
+
+        for (int i = 1; i < route.Count; i++)
+            cumulative[i] = cumulative[i - 1] + Vector2.Distance(route[i - 1], route[i]);
+
+        float totalDistance = cumulative[cumulative.Length - 1];
+
+        if (totalDistance < 1f)
+            return route;
+
+        List<Vector2> result = new List<Vector2>(pointCount) { route[0] };
+
+        for (int i = 1; i < pointCount - 1; i++)
+        {
+            float target = totalDistance * i / (pointCount - 1);
+            int segment = 0;
+
+            while (segment < route.Count - 2 && cumulative[segment + 1] < target)
+                segment++;
+
+            float segmentLength = cumulative[segment + 1] - cumulative[segment];
+            float t = segmentLength > 0.001f
+                ? Mathf.Clamp01((target - cumulative[segment]) / segmentLength)
+                : 0f;
+            result.Add(Vector2.Lerp(route[segment], route[segment + 1], t));
+        }
+
+        result.Add(route[route.Count - 1]);
+        return result;
+    }
+
+    // Adds a controlled serpentine to a route that is already known to avoid
+    // walls. Each candidate offset is validated against the same blocked
+    // field, so a curve is only kept when there is room for it.
+    private static List<Vector2> ApplyCurviness(
+        List<Vector2> route, float curviness, float maxDetour,
+        RouteCostField field, int routeSeed)
+    {
+        if (route == null || route.Count < 3 || curviness <= 0.001f)
+            return route;
+
+        float totalDistance = 0f;
+        float[] cumulative = new float[route.Count];
+
+        for (int i = 1; i < route.Count; i++)
+        {
+            totalDistance += Vector2.Distance(route[i - 1], route[i]);
+            cumulative[i] = totalDistance;
+        }
+
+        if (totalDistance < 1f)
+            return route;
+
+        float amplitude = Mathf.Min(
+            Mathf.Max(0f, maxDetour) * 0.18f, 220f) * Mathf.Clamp01(curviness);
+        // Short legs should not get a huge sideways loop just because the
+        // preset's amplitude is large.
+        amplitude = Mathf.Min(amplitude, totalDistance * 0.12f);
+
+        if (amplitude < 0.5f)
+            return route;
+
+        int maxWaves = Mathf.Max(1, (route.Count - 1) / 4);
+        int waves = Mathf.Clamp(
+            Mathf.RoundToInt(totalDistance / 1100f), 1, maxWaves);
+        float phaseOffset = Mathf.Abs(routeSeed % 360) * Mathf.Deg2Rad;
+        List<Vector2> curved = new List<Vector2>(route);
+
+        for (int i = 1; i < route.Count - 1; i++)
+        {
+            Vector2 previous = curved[i - 1];
+            Vector2 next = curved[i + 1];
+            Vector2 tangent = next - previous;
+
+            if (tangent.sqrMagnitude < 0.01f)
+                continue;
+
+            tangent.Normalize();
+            Vector2 normal = new Vector2(-tangent.y, tangent.x);
+            float u = cumulative[i] / totalDistance;
+            float taper = Mathf.Sin(u * Mathf.PI);
+            float wave = Mathf.Sin(u * Mathf.PI * 2f * waves + phaseOffset);
+            float offset = wave * amplitude * taper;
+
+            if (Mathf.Abs(offset) < 0.5f)
+                continue;
+
+            Vector2 candidate = route[i] + normal * offset;
+
+            if (IsRouteSegmentSafe(field, previous, candidate)
+                && IsRouteSegmentSafe(field, candidate, next))
+            {
+                curved[i] = candidate;
+                continue;
+            }
+
+            candidate = route[i] + normal * offset * 0.5f;
+
+            if (IsRouteSegmentSafe(field, previous, candidate)
+                && IsRouteSegmentSafe(field, candidate, next))
+            {
+                curved[i] = candidate;
+            }
+        }
+
+        return curved;
+    }
+
+    // Last line of defence: if even the chosen polyline touches a wall, cut
+    // it at the last safe sample instead of painting across the cliff.
+    private static List<Vector2> TrimBlockedRoute(
+        List<Vector2> route, RouteCostField field, out bool trimmed)
+    {
+        trimmed = false;
+
+        if (route == null || route.Count < 2)
+            return route;
+
+        for (int i = 0; i < route.Count - 1; i++)
+        {
+            if (IsRouteSegmentSafe(field, route[i], route[i + 1], true))
+                continue;
+
+            Vector2 safe = FindLastSafePoint(field, route[i], route[i + 1]);
+            route.RemoveRange(i + 1, route.Count - (i + 1));
+
+            if (Vector2.Distance(route[i], safe) > 1f)
+                route.Add(safe);
+
+            trimmed = true;
+            return route;
         }
 
         return route;
+    }
+
+    private static string AppendRouteStatus(string current, string message)
+    {
+        return string.IsNullOrEmpty(current) ? message : current + " | " + message;
+    }
+
+    // Builds a route on a cost grid. Walls are hard-blocked; mesa tops and
+    // canyon floors are legal; ramp cells connect the two. If the target is
+    // unreachable the route stops at the closest safe cell and reports it.
+    private List<Vector2> BuildCliffAwareRoute(
+        Vector2 start, Vector2 end, int maxSegments,
+        float curviness, float maxDetour, float wallClearance,
+        int routeSeed, out bool reachedTarget, out string warning)
+    {
+        reachedTarget = true;
+        warning = null;
+
+        List<Vector2> route = new List<Vector2> { start, end };
+        float distance = Vector2.Distance(start, end);
+
+        if (terrainGenerator == null || distance < 1f || maxSegments < 2)
+            return route;
+
+        float detour = Mathf.Max(200f, maxDetour);
+        float clearance = Mathf.Max(0f, wallClearance);
+
+        RouteCostField field = new RouteCostField(
+            this, start, end, detour, RouteCellSize, clearance);
+
+        field.WorldToCell(start, out int startX, out int startZ);
+        field.WorldToCell(end, out int endX, out int endZ);
+
+        int count = field.Width * field.Height;
+        float[] gScore = new float[count];
+        float[] bestF = new float[count];
+        int[] cameFrom = new int[count];
+        bool[] closed = new bool[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            gScore[i] = float.MaxValue;
+            bestF[i] = float.MaxValue;
+            cameFrom[i] = -1;
+        }
+
+        int startNode = startZ * field.Width + startX;
+        int endNode = endZ * field.Width + endX;
+        bool targetBlocked = field.IsBlockedCell(endX, endZ);
+
+        gScore[startNode] = 0f;
+        float startHeuristic = Vector2.Distance(
+            field.CellCenter(startX, startZ), end) * RouteMinCost;
+        bestF[startNode] = startHeuristic;
+
+        RouteMinHeap open = new RouteMinHeap();
+        open.Push(startNode, startHeuristic);
+
+        bool foundTarget = false;
+        int bestNode = startNode;
+        float bestDistance = Vector2.Distance(
+            field.CellCenter(startX, startZ), end);
+
+        int[] neighbourX = { 1, -1, 0, 0, 1, 1, -1, -1 };
+        int[] neighbourZ = { 0, 0, 1, -1, 1, -1, 1, -1 };
+
+        while (open.Count > 0)
+        {
+            int current = open.Pop(out float priority);
+
+            if (closed[current] || priority > bestF[current] + 0.01f)
+                continue;
+
+            closed[current] = true;
+
+            int currentX = current % field.Width;
+            int currentZ = current / field.Width;
+            Vector2 currentCenter = field.CellCenter(currentX, currentZ);
+            float distanceToEnd = Vector2.Distance(currentCenter, end);
+
+            if (distanceToEnd < bestDistance - 0.01f)
+            {
+                bestDistance = distanceToEnd;
+                bestNode = current;
+            }
+
+            if (!targetBlocked && current == endNode)
+            {
+                foundTarget = true;
+                break;
+            }
+
+            for (int n = 0; n < 8; n++)
+            {
+                int nextX = currentX + neighbourX[n];
+                int nextZ = currentZ + neighbourZ[n];
+
+                if (nextX < 0 || nextZ < 0
+                    || nextX >= field.Width || nextZ >= field.Height)
+                {
+                    continue;
+                }
+
+                bool isStart = nextX == startX && nextZ == startZ;
+
+                if (field.IsBlockedCell(nextX, nextZ) && !isStart)
+                    continue;
+
+                bool diagonal = n >= 4;
+
+                // Never squeeze diagonally between two blocked cells.
+                if (diagonal
+                    && (field.IsBlockedCell(currentX + neighbourX[n], currentZ)
+                        || field.IsBlockedCell(currentX, currentZ + neighbourZ[n])))
+                {
+                    continue;
+                }
+
+                int nextNode = nextZ * field.Width + nextX;
+
+                if (closed[nextNode])
+                    continue;
+
+                float step = diagonal
+                    ? field.CellSize * 1.41421356f
+                    : field.CellSize;
+                float edgeCost = (field.CellCost(currentX, currentZ)
+                    + field.CellCost(nextX, nextZ)) * 0.5f * step;
+
+                int previous = cameFrom[current];
+
+                if (previous >= 0)
+                {
+                    int previousX = previous % field.Width;
+                    int previousZ = previous / field.Width;
+                    float previousXDir = currentX - previousX;
+                    float previousZDir = currentZ - previousZ;
+                    float nextXDir = neighbourX[n];
+                    float nextZDir = neighbourZ[n];
+                    float previousLength = Mathf.Sqrt(
+                        previousXDir * previousXDir + previousZDir * previousZDir);
+
+                    if (previousLength > 0.001f)
+                    {
+                        float nextLength = diagonal ? 1.41421356f : 1f;
+                        float dot = (previousXDir * nextXDir + previousZDir * nextZDir)
+                            / (previousLength * nextLength);
+                        float turn = Mathf.Clamp01(1f - dot);
+                        float turnWeight = Mathf.Lerp(
+                            0.65f, 0.12f, Mathf.Clamp01(curviness));
+                        edgeCost += turn * turnWeight * step;
+                    }
+                }
+
+                float tentative = gScore[current] + edgeCost;
+
+                if (tentative >= gScore[nextNode])
+                    continue;
+
+                gScore[nextNode] = tentative;
+                cameFrom[nextNode] = current;
+                float heuristic = Vector2.Distance(
+                    field.CellCenter(nextX, nextZ), end) * RouteMinCost;
+                bestF[nextNode] = tentative + heuristic;
+                open.Push(nextNode, bestF[nextNode]);
+            }
+        }
+
+        int lastNode = foundTarget ? endNode : bestNode;
+
+        if (!foundTarget)
+        {
+            reachedTarget = false;
+            warning = "Sin ruta segura; recortada a "
+                + Mathf.RoundToInt(bestDistance) + " m del destino.";
+        }
+
+        List<Vector2> raw = new List<Vector2>();
+        int node = lastNode;
+
+        while (node >= 0)
+        {
+            int x = node % field.Width;
+            int z = node / field.Width;
+            raw.Add(field.CellCenter(x, z));
+
+            if (node == startNode)
+                break;
+
+            node = cameFrom[node];
+        }
+
+        raw.Reverse();
+
+        if (raw.Count == 0)
+            raw.Add(start);
+
+        raw[0] = start;
+
+        if (foundTarget)
+        {
+            raw[raw.Count - 1] = end;
+        }
+        else if (raw.Count == 1)
+        {
+            raw.Add(raw[0]);
+        }
+
+        List<Vector2> simplified = SimplifyRoute(raw, maxSegments, field);
+        int desiredPoints = curviness > 0.01f && maxSegments >= 3
+            ? Mathf.Clamp(
+                Mathf.RoundToInt(distance / 350f) + 1,
+                3, maxSegments + 1)
+            : simplified.Count;
+        List<Vector2> dense = ResampleRoute(simplified, desiredPoints);
+        List<Vector2> curved = ApplyCurviness(
+            dense, curviness, detour, field, routeSeed);
+        List<Vector2> trimmed = TrimBlockedRoute(curved, field, out bool wasTrimmed);
+
+        if (wasTrimmed)
+        {
+            reachedTarget = false;
+            warning = AppendRouteStatus(
+                warning, "Ruta recortada al encontrar una pared.");
+        }
+
+        if (trimmed == null || trimmed.Count == 0)
+            trimmed = new List<Vector2> { start };
+
+        return trimmed;
+    }
+
+    // If the normal corridor is blocked, widen the search before giving up.
+    // This keeps the default parameters small while still letting the router
+    // walk around a cliff band that is wider than maxDetour.
+    private List<Vector2> BuildRouteWithFallback(
+        Vector2 start, Vector2 end, int maxSegments,
+        float curviness, float maxDetour, float wallClearance,
+        int routeSeed, out bool reachedTarget, out string warning)
+    {
+        List<Vector2> bestRoute = null;
+        string bestWarning = null;
+        float bestRemaining = float.MaxValue;
+        float baseDetour = Mathf.Max(400f, maxDetour);
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            float detour = Mathf.Min(12000f, baseDetour * Mathf.Pow(2f, attempt));
+            bool reached;
+            string attemptWarning;
+            List<Vector2> route = BuildCliffAwareRoute(
+                start, end, maxSegments, curviness, detour,
+                wallClearance, routeSeed + attempt * 977,
+                out reached, out attemptWarning);
+
+            if (reached)
+            {
+                reachedTarget = true;
+                warning = null;
+                return route;
+            }
+
+            float remaining = route != null && route.Count > 0
+                ? Vector2.Distance(route[route.Count - 1], end)
+                : float.MaxValue;
+
+            if (bestRoute == null || remaining < bestRemaining)
+            {
+                bestRoute = route;
+                bestRemaining = remaining;
+                bestWarning = attemptWarning;
+            }
+        }
+
+        reachedTarget = false;
+        warning = bestWarning;
+        return bestRoute ?? new List<Vector2> { start };
     }
 
     private void AddRouteSegment(OverlayRuntime runtime, Vector2 start, Vector2 end)
@@ -1158,29 +1826,33 @@ public class TerrainStreamer : MonoBehaviour
     private void LoadOverlayPoiSegments(OverlayRuntime runtime)
     {
         runtime.segmentCount = 0;
+        runtime.routeStatus = "";
 
-        if (string.IsNullOrWhiteSpace(planetName))
-            return;
+        PlanetPOILocation location = poiOverride;
 
-        TextAsset asset = Resources.Load<TextAsset>(OGGetAddress.files + "PlanetPOIs");
-
-        if (asset == null)
-            return;
-
-        PlanetPOIs definitions = JsonUtility.FromJson<PlanetPOIs>(asset.text);
-
-        if (definitions == null || definitions.planetPOIsData == null)
-            return;
-
-        PlanetPOILocation location = null;
-
-        foreach (PlanetPOILocation candidate in definitions.planetPOIsData)
+        if (location == null)
         {
-            if (candidate != null && string.Equals(candidate.planet, planetName,
-                    System.StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(planetName))
+                return;
+
+            TextAsset asset = Resources.Load<TextAsset>(OGGetAddress.files + "PlanetPOIs");
+
+            if (asset == null)
+                return;
+
+            PlanetPOIs definitions = JsonUtility.FromJson<PlanetPOIs>(asset.text);
+
+            if (definitions == null || definitions.planetPOIsData == null)
+                return;
+
+            foreach (PlanetPOILocation candidate in definitions.planetPOIsData)
             {
-                location = candidate;
-                break;
+                if (candidate != null && string.Equals(candidate.planet, planetName,
+                        System.StringComparison.OrdinalIgnoreCase))
+                {
+                    location = candidate;
+                    break;
+                }
             }
         }
 
@@ -1191,13 +1863,19 @@ public class TerrainStreamer : MonoBehaviour
         {
             new Vector2(location.entryX, location.entryZ)
         };
+        List<string> names = new List<string> { "entrada" };
 
         if (location.pois != null)
         {
             foreach (PlanetPOIEntry poi in location.pois)
             {
-                if (poi != null)
-                    points.Add(new Vector2(poi.x, poi.z));
+                if (poi == null)
+                    continue;
+
+                points.Add(new Vector2(poi.x, poi.z));
+                names.Add(string.IsNullOrEmpty(poi.name)
+                    ? "POI " + (points.Count - 1)
+                    : poi.name);
             }
         }
 
@@ -1217,23 +1895,57 @@ public class TerrainStreamer : MonoBehaviour
         if (totalDistance < 1f)
             return;
 
-        int allocated = 0;
+        int minimum = Mathf.Clamp(
+            MaxPathSegments / Mathf.Max(1, legCount), 1, 4);
+        int remaining = MaxPathSegments;
         int[] budgets = new int[legCount];
-
-        for (int i = 0; i < legCount - 1; i++)
-        {
-            budgets[i] = Mathf.Clamp(
-                Mathf.RoundToInt(MaxPathSegments * distances[i] / totalDistance),
-                2, MaxPathSegments - 2 * (legCount - 1 - i));
-            allocated += budgets[i];
-        }
-
-        budgets[legCount - 1] = MaxPathSegments - allocated;
 
         for (int i = 0; i < legCount; i++)
         {
-            List<Vector2> route = BuildCliffAwareRoute(
-                points[i], points[i + 1], Mathf.Max(2, budgets[i]));
+            int legsAfter = legCount - 1 - i;
+
+            if (i == legCount - 1)
+            {
+                budgets[i] = Mathf.Max(1, remaining);
+                remaining = 0;
+                continue;
+            }
+
+            int maxForLeg = Mathf.Max(
+                minimum, remaining - minimum * legsAfter);
+            int budget = Mathf.Clamp(
+                Mathf.RoundToInt(MaxPathSegments * distances[i] / totalDistance),
+                minimum, maxForLeg);
+
+            budgets[i] = Mathf.Max(1, budget);
+            remaining = Mathf.Max(0, remaining - budgets[i]);
+        }
+
+        for (int i = 0; i < legCount; i++)
+        {
+            bool reachedTarget;
+            string warning;
+            List<Vector2> route = BuildRouteWithFallback(
+                points[i], points[i + 1], Mathf.Max(2, budgets[i]),
+                runtime.routeCurviness, runtime.routeMaxDetour,
+                runtime.routeWallClearance, runtime.routeSeed + i,
+                out reachedTarget, out warning);
+
+            if (!reachedTarget)
+            {
+                string target = i + 1 < names.Count ? names[i + 1] : "destino";
+                runtime.routeStatus = AppendRouteStatus(
+                    runtime.routeStatus, "Tramo a " + target + ": " + warning);
+                Debug.LogWarning("[TerrainStreamer] Tramo a " + target + ": " + warning);
+            }
+
+            if (route.Count - 1 > budgets[i])
+            {
+                runtime.routeStatus = AppendRouteStatus(
+                    runtime.routeStatus,
+                    "Tramo a " + names[i + 1] + " necesita más segmentos.");
+            }
+
             AddRouteSegments(runtime, route);
         }
     }
@@ -1243,6 +1955,7 @@ public class TerrainStreamer : MonoBehaviour
     private void LoadOverlayWanderingSegments(OverlayRuntime runtime)
     {
         runtime.segmentCount = 0;
+        runtime.routeStatus = "";
 
         if (terrainGenerator == null)
             return;
@@ -1257,7 +1970,20 @@ public class TerrainStreamer : MonoBehaviour
         Vector2 end = direction * (routeLength * 0.5f)
             + perpendicular * runtime.pD.z;
 
-        List<Vector2> route = BuildCliffAwareRoute(start, end, MaxPathSegments);
+        bool reachedTarget;
+        string warning;
+        List<Vector2> route = BuildRouteWithFallback(
+            start, end, MaxPathSegments,
+            runtime.routeCurviness, runtime.routeMaxDetour,
+            runtime.routeWallClearance, runtime.routeSeed,
+            out reachedTarget, out warning);
+
+        if (!reachedTarget)
+        {
+            runtime.routeStatus = warning ?? "Ruta recortada.";
+            Debug.LogWarning("[TerrainStreamer] " + runtime.routeStatus);
+        }
+
         AddRouteSegments(runtime, route);
     }
 

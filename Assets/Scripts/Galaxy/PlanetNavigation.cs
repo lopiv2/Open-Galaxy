@@ -193,147 +193,93 @@ public class PlanetNavigation : MonoBehaviour
             PlanetCreatures.Begin(transform, scene, location);
         }
 
-        if (location == null || location.pois == null || location.pois.Length == 0)
+        bool hasPois = location != null && location.pois != null && location.pois.Length > 0;
+
+        if (!hasPois)
         {
             Debug.Log("[PlanetNav] No POIs defined for " + planetName + " (flying free).");
-            yield break;
         }
-
-        // Spawn one beacon per POI once its tile has colliders (tiles build
-        // over several frames). Timeout per POI so one bad spot can't stall.
-        foreach (PlanetPOIEntry poi in location.pois)
+        else
         {
-            if (poi == null || string.IsNullOrEmpty(poi.name))
+            // Spawn one beacon per POI once its tile has colliders (tiles build
+            // over several frames). Timeout per POI so one bad spot can't stall.
+            foreach (PlanetPOIEntry poi in location.pois)
             {
-                poiGroundY.Add(float.NaN);
-                continue;
-            }
-
-            float groundY = float.NaN;
-            float waited = 0f;
-
-            while (float.IsNaN(groundY) && waited < 20f)
-            {
-                Vector3 probe = new Vector3(
-                    scene.transform.position.x + poi.x,
-                    2000f,
-                    scene.transform.position.z + poi.z);
-                groundY = SampleGroundHeight(probe);
-                if (float.IsNaN(groundY))
+                if (poi == null || string.IsNullOrEmpty(poi.name))
                 {
-                    waited += 0.5f;
-                    yield return new WaitForSeconds(0.5f);
-                    scene = SceneFunctions.GetScene();
-
-                    if (scene == null)
-                    {
-                        yield break;
-                    }
-                }
-            }
-
-            if (float.IsNaN(groundY))
-            {
-                Debug.LogWarning("[PlanetNav] No ground under POI " + poi.name + ", beacon skipped.");
-                poiGroundY.Add(float.NaN);
-                continue;
-            }
-
-            poiGroundY.Add(groundY);
-            SpawnBeacon(scene, poi, groundY);
-        }
-
-        // Static surface props (vehicles, buildings): ground-clamped
-        // prefabs from Resources/objects/vehicles/<prefab>.
-        if (location.props != null)
-        {
-            foreach (PlanetPOIProp prop in location.props)
-            {
-                if (prop == null || string.IsNullOrEmpty(prop.prefab))
-                {
+                    poiGroundY.Add(float.NaN);
                     continue;
                 }
 
-                // Swarm mode: several instances scattered in a disc around
-                // (x, z) with a deterministic seed. count <= 1 keeps the
-                // classic single placement.
-                int count = Mathf.Max(prop.count, 1);
-                System.Random rng = new System.Random(prop.seed);
-                List<Vector2> accepted = new List<Vector2>();
+                float groundY = float.NaN;
+                float waited = 0f;
 
-                for (int n = 0; n < count; n++)
+                while (float.IsNaN(groundY) && waited < 20f)
                 {
-                    float px = prop.x;
-                    float pz = prop.z;
-
-                    if (count > 1 && prop.radius > 0f)
+                    Vector3 probe = new Vector3(
+                        scene.transform.position.x + poi.x,
+                        2000f,
+                        scene.transform.position.z + poi.z);
+                    groundY = SampleGroundHeight(probe);
+                    if (float.IsNaN(groundY))
                     {
-                        bool placed = false;
+                        waited += 0.5f;
+                        yield return new WaitForSeconds(0.5f);
+                        scene = SceneFunctions.GetScene();
 
-                        for (int attempt = 0; attempt < 24 && !placed; attempt++)
+                        if (scene == null)
                         {
-                            double ang = rng.NextDouble() * Mathf.PI * 2.0;
-                            double rad = prop.radius * System.Math.Sqrt(rng.NextDouble());
-                            Vector2 candidate = new Vector2(
-                                prop.x + (float)(System.Math.Cos(ang) * rad),
-                                prop.z + (float)(System.Math.Sin(ang) * rad));
-                            placed = true;
-
-                            foreach (Vector2 other in accepted)
-                            {
-                                if (Vector2.Distance(candidate, other) < Mathf.Max(prop.minDist, 1f))
-                                {
-                                    placed = false;
-                                    break;
-                                }
-                            }
-
-                            if (placed)
-                            {
-                                px = candidate.x;
-                                pz = candidate.y;
-                            }
+                            yield break;
                         }
-
-                        if (!placed)
-                        {
-                            Debug.LogWarning("[PlanetNav] No room for prop " + prop.prefab + " #" + n + ", skipped.");
-                            continue;
-                        }
-
-                        accepted.Add(new Vector2(px, pz));
-                    }
-
-                    float rotY = prop.rotY;
-
-                    if (prop.randomYaw)
-                    {
-                        rotY = (float)(rng.NextDouble() * 360.0);
-                    }
-
-                    float scaleMul = Mathf.Approximately(prop.scale, 0f) ? 1f : prop.scale;
-
-                    if (prop.scaleVar > 0f)
-                    {
-                        scaleMul *= 1f + ((float)rng.NextDouble() * 2f - 1f) * prop.scaleVar;
-                    }
-
-                    yield return StartCoroutine(SpawnPropInstance(prop, px, pz, rotY, scaleMul));
-                    scene = SceneFunctions.GetScene();
-
-                    if (scene == null)
-                    {
-                        yield break;
                     }
                 }
+
+                if (float.IsNaN(groundY))
+                {
+                    Debug.LogWarning("[PlanetNav] No ground under POI " + poi.name + ", beacon skipped.");
+                    poiGroundY.Add(float.NaN);
+                    continue;
+                }
+
+                poiGroundY.Add(groundY);
+                SpawnBeacon(scene, poi, groundY);
             }
         }
 
-        RetargetNearest(true);
+        // Static surface content: isolated landmarks (props[]) and generated
+        // towns/outposts (sites[]). Both use PlanetContentUtility so the
+        // editor preview and the game produce the same layout.
+        int relaxedPlacements;
+        List<string> placementWarnings;
+        List<PlanetPropPlacement> placements = PlanetContentUtility.BuildPlacements(
+            location, out relaxedPlacements, out placementWarnings);
+
+        foreach (string warning in placementWarnings)
+            Debug.LogWarning("[PlanetNav] " + warning);
+
+        if (relaxedPlacements > 0)
+            Debug.Log("[PlanetNav] " + relaxedPlacements
+                + " props colocados con separación reducida.");
+
+        foreach (PlanetPropPlacement placement in placements)
+        {
+            yield return StartCoroutine(SpawnPropInstance(
+                placement.type, placement.x, placement.z,
+                placement.rotY, placement.scaleMul));
+            scene = SceneFunctions.GetScene();
+
+            if (scene == null)
+            {
+                yield break;
+            }
+        }
+
+        if (hasPois)
+            RetargetNearest(true);
     }
 
     // Waits for the tile under (x, z), then spawns one ground-clamped prop.
-    private IEnumerator SpawnPropInstance(PlanetPOIProp prop, float x, float z, float rotY, float scaleMul)
+    private IEnumerator SpawnPropInstance(string propType, float x, float z, float rotY, float scaleMul)
     {
         Scene scene = SceneFunctions.GetScene();
 
@@ -367,38 +313,47 @@ public class PlanetNavigation : MonoBehaviour
 
         if (float.IsNaN(groundY))
         {
-            Debug.LogWarning("[PlanetNav] No ground for prop " + prop.prefab + ", skipped.");
+            Debug.LogWarning("[PlanetNav] No ground for prop " + propType + ", skipped.");
             yield break;
         }
 
         GameObject prefab = null;
-        PropType propDef = GetPropDef(prop.prefab);
+        PropType propDef = GetPropDef(propType);
         string prefabFolder = (propDef != null && !string.IsNullOrEmpty(propDef.folder))
             ? propDef.folder
             : "objects/vehicles/";
+        string prefabName = propDef != null && !string.IsNullOrEmpty(propDef.prefab)
+            ? propDef.prefab
+            : propType;
 
-        prefab = Resources.Load<GameObject>(prefabFolder + prop.prefab);
+        prefab = Resources.Load<GameObject>(prefabFolder + prefabName);
 
         if (prefab == null)
         {
-            Debug.LogWarning("[PlanetNav] Prop prefab not found: " + prop.prefab);
+            Debug.LogWarning("[PlanetNav] Prop prefab not found: " + prefabFolder + prefabName);
             yield break;
         }
 
+        Quaternion baseRotation = prefab.transform.localRotation;
         GameObject go = GameObject.Instantiate(prefab);
-        go.name = "POIProp_" + prop.prefab;
+        go.name = "POIProp_" + propType;
+
         go.transform.SetParent(scene.transform, true);
         go.transform.position = new Vector3(
             scene.transform.position.x + x,
             scene.transform.position.y + groundY,
             scene.transform.position.z + z);
-        go.transform.rotation = Quaternion.Euler(0f, rotY, 0f);
-        // Canon scale from PropsTypes.json: longest horizontal
-        // extent matches targetLength (native FBX sizes vary).
+        // Keep the prefab's own correction rotation (e.g. -90 on X) and add
+        // the placement yaw on top. Assigning rotation directly used to
+        // discard the correction and show the model at its original angle.
+        go.transform.localRotation = baseRotation;
+        // Canon scale from PropsTypes.json: largest dimension matches
+        // targetLength (native FBX sizes vary). Measure before yaw so the
+        // placement angle cannot change the resulting scale.
         if (propDef != null && propDef.targetLength > 0f)
         {
             Bounds rawBounds = GetPropBounds(go);
-            float longest = Mathf.Max(rawBounds.size.x, rawBounds.size.z);
+            float longest = Mathf.Max(rawBounds.size.x, rawBounds.size.y, rawBounds.size.z);
 
             if (longest > 0.01f)
             {
@@ -413,6 +368,7 @@ public class PlanetNavigation : MonoBehaviour
         Bounds bb = GetPropBounds(go);
         float lift = (scene.transform.position.y + groundY) - bb.min.y;
         go.transform.position += Vector3.up * lift;
+        go.transform.localRotation = Quaternion.Euler(0f, rotY, 0f) * baseRotation;
         beacons.Add(go);
         // Selectable with R like any ship (enemy lock-ons skip it:
         // no Ship component, no allegiance).
@@ -771,7 +727,11 @@ public class PlanetNavigation : MonoBehaviour
 
         foreach (PropType def in cachedProps.propTypesData)
         {
-            if (def != null && def.prefab == prefabName)
+            if (def == null)
+                continue;
+
+            if (string.Equals(def.type, prefabName, System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(def.prefab, prefabName, System.StringComparison.OrdinalIgnoreCase))
             {
                 return def;
             }

@@ -133,8 +133,20 @@ public class TerrainOverlay
     // Path controls (metres / radians).
     public float width = 3f;
     public float feather = 4f;
+    // Fine edge noise. This does not change the route; it only wobbles the
+    // painted edge along each segment.
     public float wanderAmplitude = 10f;
     public float wanderFrequency = 0.002f;
+    // Route shape. Empty/unknown preset = "balanced". curviness/maxDetour
+    // use -1 to mean "derive from the preset"; this keeps old JSONs working.
+    public string curvePreset = "";
+    public float curviness = -1f;
+    // True when curviness was set explicitly, including a deliberate 0
+    // (straight). Missing field + 0 means "use the preset".
+    public bool curvinessSet = false;
+    public float maxDetour = -1f;
+    // Extra distance kept between the road centre and a steep wall.
+    public float wallClearance = 6f;
     public float angle = 0f;
     public float offset = 0f;
     // Patch / cliff-foot / edge breakup controls.

@@ -79,6 +79,7 @@ public class PlanetCreatures : MonoBehaviour
             yield break;
         }
 
+        Quaternion baseRotation = prefab.transform.localRotation;
         Scene scene = SceneFunctions.GetScene();
 
         if (scene == null)
@@ -163,7 +164,7 @@ public class PlanetCreatures : MonoBehaviour
             go.name = "Creature_" + herd.prefab + "_" + i;
             go.transform.SetParent(scene.transform, true);
             go.transform.position = new Vector3(spawn.x, spawnGround + groundOffset, spawn.z);
-            go.transform.rotation = Quaternion.Euler(0f, (float)(rng.NextDouble() * 360.0), 0f);
+            go.transform.localRotation = Quaternion.Euler(0f, (float)(rng.NextDouble() * 360.0), 0f) * baseRotation;
             spawned.Add(go);
 
             Animator animator = go.GetComponentInChildren<Animator>(true);

@@ -5,6 +5,8 @@ using UnityEngine.UI;
 
 public static class HudFunctions
 {
+    private static readonly Color CrosshairLockedColor = new Color(1f, 0.18f, 0.12f, 1f);
+    private static readonly Color AutoaimLabelColor = new Color(0.35f, 0.85f, 1f, 1f);
 
     #region hud start and unload functions
 
@@ -530,6 +532,150 @@ public static class HudFunctions
                 }
             }
         }
+    }
+
+    //This drives the separate lock and autoaim states. Only ordnance (torpedoes,
+    //missiles, bombs) tints the reticle; lasers leave its original texture untouched.
+    public static void DisplayCrosshair(Hud hud)
+    {
+        if (hud == null || Time.timeScale == 0)
+        {
+            return;
+        }
+
+        if (hud.crosshair == null)
+        {
+            hud.crosshair = FindCanvasGroupExact(hud, "Crosshair");
+        }
+
+        if (hud.crosshairLocked == null)
+        {
+            hud.crosshairLocked = FindCanvasGroupExact(hud, "Crosshair_Locked");
+        }
+
+        if (hud.autoaim == null)
+        {
+            hud.autoaim = FindCanvasGroupExact(hud, "Autoaim");
+        }
+
+        if (hud.crosshair == null)
+        {
+            return;
+        }
+
+        if (hud.crosshairImage == null)
+        {
+            hud.crosshairImage = hud.crosshair.GetComponent<Image>();
+        }
+
+        if (hud.crosshairLockedImage == null && hud.crosshairLocked != null)
+        {
+            hud.crosshairLockedImage = hud.crosshairLocked.GetComponent<Image>();
+        }
+
+        EnsureAutoaimLabel(hud);
+
+        Ship ship = hud.mainShip;
+        bool ordnanceSelected = false;
+        bool lockingOn = false;
+        bool lockedOn = false;
+
+        if (ship != null && ship.weaponManagement != null)
+        {
+            ordnanceSelected = IsOrdnanceWeapon(ship.weaponManagement.weaponType);
+
+            if (ordnanceSelected && ship.torpedoSystem != null)
+            {
+                lockingOn = ship.torpedoSystem.torpedoLockingOn && !ship.torpedoSystem.torpedoLockedOn;
+                lockedOn = ship.torpedoSystem.torpedoLockedOn;
+            }
+        }
+
+        //The normal crosshair keeps its original colour. Only ordnance turns it red:
+        //it pulses while acquiring and stays solid once the lock is complete.
+        float lockBlink = 0f;
+
+        if (lockingOn)
+        {
+            lockBlink = Mathf.PingPong(Time.time * 4f, 1f);
+        }
+
+        Color crosshairColor = Color.white;
+        float crosshairAlpha = 1f;
+
+        if (lockedOn)
+        {
+            crosshairColor = CrosshairLockedColor;
+        }
+        else if (lockingOn)
+        {
+            crosshairColor = Color.Lerp(Color.white, CrosshairLockedColor, lockBlink);
+            crosshairAlpha = 0.85f;
+        }
+
+        if (hud.crosshairImage != null)
+        {
+            hud.crosshairImage.color = crosshairColor;
+        }
+
+        hud.crosshair.alpha = crosshairAlpha;
+
+        //The locked reticle is only for ordnance. It blinks while acquiring and
+        //stays solid once the lock is complete.
+        if (hud.crosshairLocked != null)
+        {
+            if (lockedOn)
+            {
+                hud.crosshairLocked.alpha = 1f;
+            }
+            else if (lockingOn)
+            {
+                hud.crosshairLocked.alpha = Mathf.Lerp(0.15f, 1f, lockBlink);
+            }
+            else
+            {
+                hud.crosshairLocked.alpha = 0f;
+            }
+
+            if (hud.crosshairLockedImage != null)
+            {
+                hud.crosshairLockedImage.color = CrosshairLockedColor;
+            }
+        }
+
+        //Autoaim is a separate state from the reticle. The old ring texture stays
+        //hidden; a small AUTO label shows the state instead.
+        bool autoaimOn = ship != null && ship.targetingSystem != null && ship.targetingSystem.autoaim;
+        bool autoaimAssisting = false;
+
+        if (autoaimOn)
+        {
+            TargetingSystem targetingSystem = ship.targetingSystem;
+            autoaimAssisting = targetingSystem.target != null
+                && targetingSystem.targetRigidbody != null
+                && targetingSystem.targetForward > 0.995f
+                && targetingSystem.targetLargeShip == null;
+        }
+
+        if (hud.autoaim != null)
+        {
+            hud.autoaim.alpha = 0f;
+        }
+
+        if (hud.autoaimLabel != null)
+        {
+            hud.autoaimLabel.text = "AUTO";
+
+            Color labelColor = AutoaimLabelColor;
+            labelColor.a = autoaimOn ? (autoaimAssisting ? 0.85f : 0.35f) : 0f;
+            hud.autoaimLabel.color = labelColor;
+        }
+    }
+
+    //Torpedoes, missiles and bombs are the ordnance types that can show a lock reticle.
+    private static bool IsOrdnanceWeapon(string weaponType)
+    {
+        return weaponType == "torpedos" || weaponType == "missiles" || weaponType == "bombs";
     }
 
     //This displays an arrow on the screen edge pointing to the target when it is offscreen.
@@ -1228,6 +1374,138 @@ public static class HudFunctions
         }
 
         return text;
+    }
+
+    //This finds a specific canvas group by its exact name (FindCanvasGroup uses Contains,
+    //so asking for "Crosshair" can return "Crosshair_Locked" instead).
+    public static CanvasGroup FindCanvasGroupExact(Hud hud, string canvasGroupName)
+    {
+        if (hud == null)
+        {
+            return null;
+        }
+
+        if (hud.canvasGroups == null || hud.canvasGroups.Count == 0)
+        {
+            hud.canvasGroups = new List<CanvasGroup>();
+            CanvasGroup[] allCanvasGroups = hud.transform.GetComponentsInChildren<CanvasGroup>(true);
+
+            foreach (CanvasGroup tempCanvasGroup in allCanvasGroups)
+            {
+                hud.canvasGroups.Add(tempCanvasGroup);
+            }
+        }
+
+        foreach (CanvasGroup tempCanvasGroup in hud.canvasGroups)
+        {
+            if (tempCanvasGroup != null && tempCanvasGroup.name == canvasGroupName)
+            {
+                return tempCanvasGroup;
+            }
+        }
+
+        return null;
+    }
+
+    //Finds a Text by its exact name. FindText uses Contains, which is too loose here.
+    public static Text FindTextExact(Hud hud, string textName)
+    {
+        if (hud == null)
+        {
+            return null;
+        }
+
+        if (hud.textBoxes == null || hud.textBoxes.Count == 0)
+        {
+            hud.textBoxes = new List<Text>();
+            Text[] allText = hud.transform.GetComponentsInChildren<Text>(true);
+
+            foreach (Text tempText in allText)
+            {
+                hud.textBoxes.Add(tempText);
+            }
+        }
+
+        foreach (Text tempText in hud.textBoxes)
+        {
+            if (tempText != null && tempText.name == textName)
+            {
+                return tempText;
+            }
+        }
+
+        return null;
+    }
+
+    //The autoaim state used to be a large ring texture. Keep the old object hidden and
+    //create a small AUTO text label at runtime instead, so the prefab needs no texture.
+    private static void EnsureAutoaimLabel(Hud hud)
+    {
+        if (hud == null || hud.autoaimLabel != null)
+        {
+            return;
+        }
+
+        hud.autoaimLabel = FindTextExact(hud, "AutoaimLabel");
+
+        if (hud.autoaimLabel != null)
+        {
+            return;
+        }
+
+        Text template = FindTextExact(hud, "HintText");
+
+        if (template == null && hud.textBoxes != null && hud.textBoxes.Count > 0)
+        {
+            template = hud.textBoxes[0];
+        }
+
+        GameObject labelGO = new GameObject("AutoaimLabel", typeof(RectTransform), typeof(CanvasRenderer), typeof(Text));
+        labelGO.layer = hud.gameObject.layer;
+
+        Transform parent = hud.crosshair != null ? hud.crosshair.transform.parent : hud.transform;
+        labelGO.transform.SetParent(parent, false);
+
+        RectTransform rect = labelGO.GetComponent<RectTransform>();
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(0f, -55f);
+        rect.sizeDelta = new Vector2(100f, 24f);
+        rect.localScale = Vector3.one;
+
+        Text label = labelGO.GetComponent<Text>();
+
+        if (template != null)
+        {
+            label.font = template.font;
+            label.material = template.material;
+        }
+        else
+        {
+            label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        }
+
+        label.text = "AUTO";
+        label.fontSize = 14;
+        label.fontStyle = FontStyle.Bold;
+        label.alignment = TextAnchor.MiddleCenter;
+        label.horizontalOverflow = HorizontalWrapMode.Overflow;
+        label.verticalOverflow = VerticalWrapMode.Overflow;
+        label.raycastTarget = false;
+        label.color = new Color(AutoaimLabelColor.r, AutoaimLabelColor.g, AutoaimLabelColor.b, 0f);
+
+        hud.autoaimLabel = label;
+
+        if (hud.textBoxes == null)
+        {
+            hud.textBoxes = new List<Text>();
+        }
+
+        if (!hud.textBoxes.Contains(label))
+        {
+            hud.textBoxes.Add(label);
+        }
     }
 
     //This uses a string to find a specific canvas group

@@ -257,12 +257,12 @@ Material:
     - _Overlay1B: {r: 6, g: 6, b: 18, a: 0.0006}
     - _Overlay1C: {r: 0.0015, g: 0.5, b: 0.12, a: 37}
     - _Overlay1D: {r: 1, g: 0, b: 0, a: 6.4009995}
-    - _Overlay1E: {r: 0, g: 0, b: 16, a: 0}
+    - _Overlay1E: {r: 0, g: 0, b: 24, a: 0}
     - _Overlay2A: {r: 0.05, g: 0.85, b: 0, a: 2}
     - _Overlay2B: {r: 8, g: 8, b: 12, a: 0.0008}
     - _Overlay2C: {r: 0.0018, g: 0.5, b: 0.12, a: 91}
     - _Overlay2D: {r: -0.24192187, g: 0.9702957, b: 0, a: 15.742999}
-    - _Overlay2E: {r: 0, g: 0, b: 11, a: 0}
+    - _Overlay2E: {r: 0, g: 0, b: 22, a: 0}
     - _SpecColor: {r: 0.19999996, g: 0.19999996, b: 0.19999996, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

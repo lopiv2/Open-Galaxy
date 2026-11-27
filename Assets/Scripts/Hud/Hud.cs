@@ -25,6 +25,14 @@ public class Hud : MonoBehaviour
     public GameObject targetSelected;
     public List<GameObject> targets;
 
+    //Crosshair
+    [HideInInspector] public CanvasGroup crosshair;
+    [HideInInspector] public CanvasGroup crosshairLocked;
+    [HideInInspector] public CanvasGroup autoaim;
+    [HideInInspector] public Image crosshairImage;
+    [HideInInspector] public Image crosshairLockedImage;
+    [HideInInspector] public Text autoaimLabel;
+
     //Offscreen target arrow (edge indicator ported from Hud_Old.DisplaySelectionBraces)
     public GameObject arrowTarget;
     [HideInInspector] public CanvasGroup arrowCanvasGroup;
@@ -66,6 +74,7 @@ public class Hud : MonoBehaviour
         HudFunctions.DisplayEnergyManagementMeters(this);
         HudFunctions.DisplayShipPreview(this);
         HudFunctions.DisplayTargetInformation(this);
+        HudFunctions.DisplayCrosshair(this);
         HudFunctions.DisplayInterceptPoint(this);
         HudFunctions.DisplayWaypoint(this);
         HudFunctions.DisplayShieldWarning(this);

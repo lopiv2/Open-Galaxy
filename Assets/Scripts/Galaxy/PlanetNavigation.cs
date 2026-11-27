@@ -243,6 +243,7 @@ public class PlanetNavigation : MonoBehaviour
 
                 poiGroundY.Add(groundY);
                 SpawnBeacon(scene, poi, groundY);
+                SpawnPoiLandmark(scene, poi, groundY);
             }
         }
 
@@ -558,10 +559,54 @@ public class PlanetNavigation : MonoBehaviour
             scene.transform.position.z + poi.z);
 
         hud.waypointActive = true;
-        // The on-foot compass already names the selected POI, so the old
-        // "NAV: <POI>" floating title and mission-log line are redundant.
-        // The waypoint marker itself (and its distance) stays.
-        hud.waypointTitle = "";
+        // Ship HUD: keep the POI name next to the waypoint marker (the
+        // on-foot compass is hidden while flying, so it cannot replace it).
+        hud.waypointTitle = "NAV: " + poi.name;
+    }
+
+    // Registers the town/POI itself as an R-target. Before this, only the
+    // individual props (houses, vaporators...) were in the object pool, so
+    // cycling targets never showed "MOS EISLEY" as a place.
+    private void SpawnPoiLandmark(Scene scene, PlanetPOIEntry poi, float groundY)
+    {
+        GameObject landmark = new GameObject(poi.name);
+        landmark.transform.SetParent(scene.transform, true);
+        landmark.transform.position = new Vector3(
+            scene.transform.position.x + poi.x,
+            scene.transform.position.y + groundY + 10f,
+            scene.transform.position.z + poi.z);
+
+        // Invisible bounds anchor: the HUD needs a renderer to know whether
+        // the target is on screen (braces/off-screen arrow), but a town is a
+        // whole cluster of props, so this tiny disabled mesh marks the center.
+        GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        marker.name = "Center";
+        marker.transform.SetParent(landmark.transform, false);
+        marker.transform.localScale = Vector3.one * 0.01f;
+
+        Collider markerCollider = marker.GetComponent<Collider>();
+
+        if (markerCollider != null)
+        {
+            GameObject.Destroy(markerCollider);
+        }
+
+        Renderer markerRenderer = marker.GetComponent<Renderer>();
+
+        if (markerRenderer != null)
+        {
+            markerRenderer.enabled = false;
+        }
+
+        if (scene.objectPool != null && !scene.objectPool.Contains(landmark))
+        {
+            scene.objectPool.Add(landmark);
+        }
+
+        // propObjects: removed from the pool on cleanup.
+        // beacons: destroyed with the rest of the planet content.
+        propObjects.Add(landmark);
+        beacons.Add(landmark);
     }
 
     private void SpawnBeacon(Scene scene, PlanetPOIEntry poi, float groundY)

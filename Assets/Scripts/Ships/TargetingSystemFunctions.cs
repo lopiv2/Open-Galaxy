@@ -726,13 +726,26 @@ public static class TargetingSystemFunctions
             {
                 if (targetingSystem.target != null)
                 {
-                    for (int i = 0; i < scene.objectPool.Count; i++)
+                    // Use the target reference, not its name: several props
+                    // (the houses of a town, for instance) share the same
+                    // name, so the name lookup jumped to the last duplicate
+                    // and made R skip most of the targets.
+                    int targetIndex = scene.objectPool.IndexOf(targetingSystem.target);
+
+                    if (targetIndex >= 0)
                     {
-                        if (scene.objectPool[i] != null)
+                        targetNumber = targetIndex + 1;
+                    }
+                    else
+                    {
+                        for (int i = 0; i < scene.objectPool.Count; i++)
                         {
-                            if (scene.objectPool[i].name == targetingSystem.target.name)
+                            if (scene.objectPool[i] != null)
                             {
-                                targetNumber = i + 1;
+                                if (scene.objectPool[i].name == targetingSystem.target.name)
+                                {
+                                    targetNumber = i + 1;
+                                }
                             }
                         }
                     }

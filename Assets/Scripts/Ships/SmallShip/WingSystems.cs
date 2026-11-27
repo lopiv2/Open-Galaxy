@@ -30,6 +30,16 @@ public class WingSystems : MonoBehaviour
     public GameObject wing04_open;
     public GameObject wing04_closed;
 
+    [Header("Landing Gear (optional, landing sequences only)")]
+    // True when the gear is deployed. Landing/docking/takeoff sequences set
+    // this; the manual wing toggle and hyperspace never touch the gear.
+    public bool gearDown = false;
+    // Populated by FindMovableGear from prefab nodes named gear01..gearNN
+    // with markers gearXX_up / gearXX_down (same pattern as wings).
+    public GameObject[] gearNodes;
+    public GameObject[] gearUpMarkers;
+    public GameObject[] gearDownMarkers;
+
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {

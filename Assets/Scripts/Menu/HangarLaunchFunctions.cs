@@ -371,6 +371,38 @@ public static class HangarLaunchFunctions
             SnapToWingPosition(wing04, wing04_open.transform, wing04_closed.transform, 2, false);
         }
 
+        //Landing gear down for parked ships (same pattern, by name).
+        Transform[] gearParts = GameObjectUtils.FindAllChildTransformsContaining(ship.transform, "gear");
+
+        for (int gearIndex = 1; gearIndex <= 12; gearIndex++)
+        {
+            string gearName = "gear" + gearIndex.ToString("00");
+            GameObject gearNode = null;
+            GameObject gearUp = null;
+            GameObject gearDown = null;
+
+            foreach (Transform part in gearParts)
+            {
+                if (part.name == gearName)
+                {
+                    gearNode = part.gameObject;
+                }
+                else if (part.name == gearName + "_up")
+                {
+                    gearUp = part.gameObject;
+                }
+                else if (part.name == gearName + "_down")
+                {
+                    gearDown = part.gameObject;
+                }
+            }
+
+            if (gearNode != null & gearUp != null & gearDown != null)
+            {
+                WingSystemFunctions.SnapToGearPose(gearNode, gearUp.transform, gearDown.transform, false);
+            }
+        }
+
     }
 
     public static void SnapToWingPosition(GameObject wing, Transform openPosition, Transform closePosition, float speed, bool open)
@@ -506,6 +538,7 @@ public static class HangarLaunchFunctions
         if (hangarLaunch.ship != null)
         {
             WingSystemFunctions.OpenWings(hangarLaunch.ship.GetComponent<WingSystems>());
+            WingSystemFunctions.RetractGear(hangarLaunch.ship.GetComponent<WingSystems>());
             HudFunctions.AddToMissionLog("S-FOILS OPEN - WEAPONS ONLINE");
         }
 
@@ -521,6 +554,7 @@ public static class HangarLaunchFunctions
         if (hangarLaunch.ship != null)
         {
             WingSystemFunctions.CloseWings(hangarLaunch.ship.GetComponent<WingSystems>());
+            WingSystemFunctions.DeployGear(hangarLaunch.ship.GetComponent<WingSystems>());
             HudFunctions.AddToMissionLog("S-FOILS CLOSED - CRUISE MODE");
         }
 

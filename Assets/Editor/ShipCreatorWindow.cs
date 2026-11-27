@@ -20,10 +20,22 @@ using Object = UnityEngine.Object;
 //   dockingPoint                        -> acoplamiento
 //   gunbank01/gunbank01-01..04          -> 4 cañones de energia
 //   missilebank01/missilebank01-01..04  -> 4 tubos de torpedos
+//   wing01..04 + wingXX_open/closed     -> alas moviles opcionales (S-foils:
+//                                          tecla V, aterrizaje, hangar; si no
+//                                          existen la nave las ignora)
+//   gear01..NN + gearXX_up/down         -> tren de aterrizaje opcional (solo
+//                                          secuencias de aterrizaje/
+//                                          despegue/acoplamiento; nunca V ni
+//                                          hiperspacio)
 //   engine1..N                          -> visual de motores (opcional)
 // Ademas el tipo debe estar en Resources/files/ShipTypes.json con un
 // cockpitPrefab valido de Resources/objects/cockpits y scriptType "smallship"
 // para que el jugador pueda pilotarla.
+//
+// Convencion de gameplay: morro en +Z (la 3a persona usa (0, L/2, -L) y los
+// laser/empuje van por transform.forward). El toggle 'Morro en -Z' solo es
+// para modelos construidos al reves. CreateShip valida las anclas antes de
+// guardar y LoadSelected avisa si el prefab cargado es incoherente.
 public class ShipCreatorWindow : EditorWindow
 {
     private const string MenuPath = "Tools/Open Galaxy/Ship Creator (ShipTypes)";
@@ -42,7 +54,11 @@ public class ShipCreatorWindow : EditorWindow
     [SerializeField] private Object engineSource;
     [SerializeField] private Object shieldSource;
 
-    [SerializeField] private bool noseNegativeZ = true;
+    // Convencion de gameplay: morro en +Z (la 3a persona usa (0, L/2, -L) y los
+    // laser/empuje van por transform.forward). El toggle 'Morro en -Z' solo es
+    // para modelos construidos al reves; con el valor por defecto las anclas
+    // salen del lado correcto sin tocar nada.
+    [SerializeField] private bool noseNegativeZ = false;
     [SerializeField] private int engineCount = 2;
     [SerializeField] private float engineSpacing = -1f;
     [SerializeField] private float engineYOffset;
@@ -268,7 +284,7 @@ public class ShipCreatorWindow : EditorWindow
             engineSource = newEngine;
             SyncEngineGlowIndex();
         }
-        noseNegativeZ = EditorGUILayout.Toggle("Morro en -Z (convencion OG)", noseNegativeZ);
+        noseNegativeZ = EditorGUILayout.Toggle("Morro en -Z (gameplay usa morro +Z)", noseNegativeZ);
         engineCount = Mathf.Clamp(EditorGUILayout.IntField("Numero de motores", engineCount), 0, 8);
         if (engineSource != null)
         {
@@ -465,9 +481,11 @@ public class ShipCreatorWindow : EditorWindow
                 new Vector3(bounds.center.x, bounds.center.y + 0.8f * bounds.size.y,
                     bounds.center.z - Forward * 1.0f * bounds.size.z));
 
+            // El modo focus coloca la camara en este punto mirando al frente de la
+            // nave, asi que debe quedar DETRAS y cerca (como en xwing/awing).
             CreateAnchor(root, "focuscamera",
                 new Vector3(bounds.center.x, bounds.center.y + 0.3f * bounds.size.y,
-                    bounds.center.z + Forward * 0.9f * bounds.size.z));
+                    bounds.center.z - Forward * 0.35f * bounds.size.z));
 
             CreateAnchor(root, "dockingPoint",
                 new Vector3(bounds.center.x, bounds.center.y - 0.5f * bounds.size.y, bounds.center.z));
@@ -484,6 +502,13 @@ public class ShipCreatorWindow : EditorWindow
                 GameObject shield = InstantiateSourceAsChild(root, shieldSource, "shieldfield");
                 if (shield != null)
                     shield.transform.localPosition = bounds.center;
+            }
+
+            string anchorError = ValidateAnchors(root, bounds);
+            if (!string.IsNullOrEmpty(anchorError))
+            {
+                SetStatus("Anclajes inconsistentes, prefab NO guardado: " + anchorError, MessageType.Error);
+                return;
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(prefabPath));
@@ -559,6 +584,137 @@ public class ShipCreatorWindow : EditorWindow
             slot.transform.localPosition = new Vector3(offset, 0f, 0f);
             slot.transform.localRotation = Quaternion.identity;
         }
+    }
+
+    // Verifica que camara/armas queden del lado del morro y seguimiento/enfoque/
+    // motores del lado contrario. Si no, la vista en 3a persona no muestra la nave
+    // (bug del assault gunboat: followcamera delante del morro).
+    // Devuelve null si todo es consistente, o la descripcion del problema.
+    private string ValidateAnchors(GameObject root, Bounds bounds)
+    {
+        if (bounds.size.z < 0.01f)
+            return "el modelo es casi plano en Z (" + F(bounds.size.z) + " m); no se puede orientar el morro.";
+
+        float fwd = Forward;
+        float cz = bounds.center.z;
+        float tol = 0.1f * bounds.size.z;
+
+        Transform weapons = FindAnchor(root.transform, "gunbank01");
+        if (weapons == null)
+            weapons = FindAnchor(root.transform, "missilebank01");
+        if (weapons != null && (BankMuzzleZ(weapons) - cz) * fwd < -tol)
+            return "el banco de armas quedo del lado contrario al morro (revisa el toggle 'Morro en -Z').";
+
+        Transform camera = FindAnchor(root.transform, "camera");
+        if (camera != null && (camera.localPosition.z - cz) * fwd < -tol)
+            return "el ancla 'camera' quedo detras (lado motores); la cabina iria en la cola.";
+
+        Transform follow = FindAnchor(root.transform, "followcamera");
+        if (follow == null)
+            return "falta el ancla 'followcamera'.";
+        if ((follow.localPosition.z - cz) * fwd > tol)
+            return "el ancla 'followcamera' quedo delante del morro: la 3a persona no mostraria la nave.";
+
+        Transform focus = FindAnchor(root.transform, "focuscamera");
+        if (focus != null && (focus.localPosition.z - cz) * fwd > tol)
+            return "el ancla 'focuscamera' quedo delante del morro: el modo enfoque no mostraria la nave.";
+
+        foreach (Transform child in root.transform)
+        {
+            if (child.name.StartsWith("engine", StringComparison.OrdinalIgnoreCase)
+                && (child.localPosition.z - cz) * fwd > tol)
+                return "el motor '" + child.name + "' quedo del lado del morro.";
+        }
+
+        return null;
+    }
+
+    // Revisa un prefab YA EXISTENTE (p. ej. recien cargado desde el JSON) y
+    // describe inconsistencias morro/cola sin depender del toggle actual.
+    // Habria marcado el bug del assault gunboat nada mas cargarlo.
+    // Devuelve null si es coherente o no hay referencia (sin motores ni armas
+    // desplazadas) para opinar.
+    private static string CheckExistingAnchors(GameObject root)
+    {
+        Bounds bounds;
+        if (!ComputeRendererBounds(root, out bounds))
+            return "el prefab no tiene mallas visibles.";
+        if (bounds.size.z < 0.01f)
+            return null;
+
+        float cz = bounds.center.z;
+        float tol = 0.1f * bounds.size.z;
+
+        // Los motores son la referencia mas fiable de la cola; si quedan
+        // centrados se ignoran y se usan las bocas de las armas como morro.
+        float tailSide = 0f;
+        float engSum = 0f;
+        int engCount = 0;
+        foreach (Transform child in root.transform)
+        {
+            if (child.name.StartsWith("engine", StringComparison.OrdinalIgnoreCase))
+            {
+                engSum += child.position.z;
+                engCount++;
+            }
+        }
+        if (engCount > 0 && Mathf.Abs(engSum / engCount - cz) > tol)
+            tailSide = Mathf.Sign(engSum / engCount - cz);
+
+        Transform weapons = FindAnchor(root.transform, "gunbank01");
+        if (weapons == null)
+            weapons = FindAnchor(root.transform, "missilebank01");
+        if (tailSide == 0f && weapons != null && Mathf.Abs(BankMuzzleZ(weapons) - cz) > tol)
+            tailSide = -Mathf.Sign(BankMuzzleZ(weapons) - cz);
+
+        if (tailSide == 0f)
+            return null;
+
+        Transform follow = FindAnchor(root.transform, "followcamera");
+        if (follow == null)
+            return "no tiene ancla 'followcamera' (la 3a persona usaria el calculo por defecto).";
+        if ((follow.position.z - cz) * tailSide < -tol)
+            return "'followcamera' esta del lado del morro: en 3a persona la nave no se veria (mismo bug que tenia el assault gunboat).";
+
+        Transform focus = FindAnchor(root.transform, "focuscamera");
+        if (focus != null && (focus.position.z - cz) * tailSide < -tol)
+            return "'focuscamera' esta del lado del morro: el modo enfoque no mostraria la nave.";
+
+        Transform camera = FindAnchor(root.transform, "camera");
+        if (camera != null && (camera.position.z - cz) * tailSide > tol)
+            return "el ancla 'camera' esta del lado de los motores: la cabina quedaria en la cola.";
+
+        if (weapons != null && (BankMuzzleZ(weapons) - cz) * tailSide > tol)
+            return "el banco de armas esta del lado de los motores.";
+
+        return null;
+    }
+
+    // Z media de las bocas de un banco (hijos) en espacio mundo; si no tiene
+    // hijos, la del propio banco. Asi vale tanto para bancos generados por la
+    // herramienta (hijos solo desplazados en X) como para bancos manuales donde
+    // el grupo puede estar lejos de las bocas (caso del gunboat).
+    private static float BankMuzzleZ(Transform bank)
+    {
+        if (bank.childCount == 0)
+            return bank.position.z;
+        float sum = 0f;
+        foreach (Transform slot in bank)
+            sum += slot.position.z;
+        return sum / bank.childCount;
+    }
+
+    private static Transform FindAnchor(Transform parent, string name)
+    {
+        foreach (Transform child in parent)
+        {
+            if (string.Equals(child.name, name, StringComparison.OrdinalIgnoreCase))
+                return child;
+            Transform found = FindAnchor(child, name);
+            if (found != null)
+                return found;
+        }
+        return null;
     }
 
     private static GameObject CreateAnchor(GameObject root, string name, Vector3 localPosition)
@@ -1136,7 +1292,25 @@ public class ShipCreatorWindow : EditorWindow
             SetStatus("Cargado '" + type + "', PERO falta el prefab de cabina '" + current.cockpitPrefab +
                 "'. Selecciona una cabina valida antes de crear/guardar la nave.", MessageType.Error);
         else
-            SetStatus("Cargado '" + type + "' (" + current.scriptType + ", cabina " + current.cockpitPrefab + ").", MessageType.Info);
+        {
+            // Si el prefab ya existe, revisa que sus anclas sean coherentes con las
+            // armas (morro/cola). Asi se detectan casos como el del assault gunboat.
+            string anchorWarning = null;
+            if (exteriorSource != null)
+            {
+                GameObject tempCheck = BuildTempInstance(exteriorSource);
+                if (tempCheck != null)
+                {
+                    try { anchorWarning = CheckExistingAnchors(tempCheck); }
+                    finally { DestroyImmediate(tempCheck); }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(anchorWarning))
+                SetStatus("Cargado '" + type + "', PERO " + anchorWarning, MessageType.Error);
+            else
+                SetStatus("Cargado '" + type + "' (" + current.scriptType + ", cabina " + current.cockpitPrefab + ").", MessageType.Info);
+        }
     }
 
     private void UpsertShipType(ShipType spec)

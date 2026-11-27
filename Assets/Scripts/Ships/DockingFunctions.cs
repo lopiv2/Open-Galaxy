@@ -230,6 +230,7 @@ public static class DockingFunctions
             ship.flightControlSystem_Small.docking = true;
             ship.flightControlSystem_Small.thrustSpeed = 0;
             WingSystemFunctions.CloseWings(ship.wingSystems);
+            WingSystemFunctions.DeployGear(ship.wingSystems);
             ship.flightControlSystem_Small.targetDockingPoint = targetDockingPoint.gameObject;
         }
 
@@ -405,6 +406,7 @@ public static class DockingFunctions
                 ship.flightControlSystem_Small.docking = false;
                 ship.flightControlSystem_Small.thrustSpeed = 0;
                 WingSystemFunctions.OpenWings(ship.wingSystems);
+                WingSystemFunctions.RetractGear(ship.wingSystems);
             }
 
             if (largeShip != null)

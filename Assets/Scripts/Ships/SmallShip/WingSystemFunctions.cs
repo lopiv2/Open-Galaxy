@@ -333,6 +333,270 @@ public static class WingSystemFunctions
         wing.transform.localRotation = endRotation;
     }
 
+    #region landing gear (optional, landing sequences only)
+
+    // True when this ship model has deployable landing gear (AGB gunboat...).
+    // Ships without gear markers (X-Wing, TIE...) ignore every gear command.
+    // Gear is driven ONLY by landing/docking/takeoff sequences: the manual
+    // wing toggle (V) and hyperspace never touch it.
+    public static bool HasMovableGear(WingSystems wingSystem)
+    {
+        if (wingSystem == null)
+        {
+            return false;
+        }
+
+        if (wingSystem.gearNodes == null)
+        {
+            FindMovableGear(wingSystem);
+        }
+
+        return wingSystem.gearNodes != null & wingSystem.gearNodes.Length > 0;
+    }
+
+    //Deploys the landing gear (animated, ~2.5s like the authored clips).
+    //Gear markers hold full local poses (position AND rotation): legs
+    //translate down, hatches rotate open.
+    public static void DeployGear(WingSystems wingSystem)
+    {
+        if (wingSystem == null)
+        {
+            return;
+        }
+
+        if (wingSystem.gearDown == true)
+        {
+            return;
+        }
+
+        if (wingSystem.gearNodes == null)
+        {
+            FindMovableGear(wingSystem);
+        }
+
+        wingSystem.gearDown = true;
+
+        if (HasMovableGear(wingSystem) == false)
+        {
+            return;
+        }
+
+        for (int i = 0; i < wingSystem.gearNodes.Length; i++)
+        {
+            if (wingSystem.gearNodes[i] != null & wingSystem.gearUpMarkers[i] != null & wingSystem.gearDownMarkers[i] != null)
+            {
+                Task a = new Task(LerpToGearPose(wingSystem.gearNodes[i], wingSystem.gearUpMarkers[i].transform, wingSystem.gearDownMarkers[i].transform, 2.5f, false));
+            }
+        }
+    }
+
+    //Retracts the landing gear (animated)
+    public static void RetractGear(WingSystems wingSystem)
+    {
+        if (wingSystem == null)
+        {
+            return;
+        }
+
+        if (wingSystem.gearDown == false)
+        {
+            return;
+        }
+
+        if (wingSystem.gearNodes == null)
+        {
+            FindMovableGear(wingSystem);
+        }
+
+        wingSystem.gearDown = false;
+
+        if (HasMovableGear(wingSystem) == false)
+        {
+            return;
+        }
+
+        for (int i = 0; i < wingSystem.gearNodes.Length; i++)
+        {
+            if (wingSystem.gearNodes[i] != null & wingSystem.gearUpMarkers[i] != null & wingSystem.gearDownMarkers[i] != null)
+            {
+                Task a = new Task(LerpToGearPose(wingSystem.gearNodes[i], wingSystem.gearUpMarkers[i].transform, wingSystem.gearDownMarkers[i].transform, 2.5f, true));
+            }
+        }
+    }
+
+    //Snaps the gear deployed (hangar display, no animation)
+    public static void SnapGearDown(WingSystems wingSystems)
+    {
+        if (wingSystems == null)
+        {
+            return;
+        }
+
+        if (wingSystems.gearNodes == null)
+        {
+            FindMovableGear(wingSystems);
+        }
+
+        wingSystems.gearDown = true;
+
+        if (HasMovableGear(wingSystems) == false)
+        {
+            return;
+        }
+
+        for (int i = 0; i < wingSystems.gearNodes.Length; i++)
+        {
+            if (wingSystems.gearNodes[i] != null & wingSystems.gearUpMarkers[i] != null & wingSystems.gearDownMarkers[i] != null)
+            {
+                SnapToGearPose(wingSystems.gearNodes[i], wingSystems.gearUpMarkers[i].transform, wingSystems.gearDownMarkers[i].transform, false);
+            }
+        }
+    }
+
+    //Snaps the gear retracted (no animation)
+    public static void SnapGearUp(WingSystems wingSystems)
+    {
+        if (wingSystems == null)
+        {
+            return;
+        }
+
+        if (wingSystems.gearNodes == null)
+        {
+            FindMovableGear(wingSystems);
+        }
+
+        wingSystems.gearDown = false;
+
+        if (HasMovableGear(wingSystems) == false)
+        {
+            return;
+        }
+
+        for (int i = 0; i < wingSystems.gearNodes.Length; i++)
+        {
+            if (wingSystems.gearNodes[i] != null & wingSystems.gearUpMarkers[i] != null & wingSystems.gearDownMarkers[i] != null)
+            {
+                SnapToGearPose(wingSystems.gearNodes[i], wingSystems.gearUpMarkers[i].transform, wingSystems.gearDownMarkers[i].transform, true);
+            }
+        }
+    }
+
+    //This lerps a gear node between its up and down marker poses
+    //(position and rotation: legs translate, hatches rotate).
+    public static IEnumerator LerpToGearPose(GameObject gearNode, Transform upPose, Transform downPose, float duration, bool retract)
+    {
+        Vector3 startPosition = downPose.localPosition;
+        Quaternion startRotation = downPose.localRotation;
+        Vector3 endPosition = upPose.localPosition;
+        Quaternion endRotation = upPose.localRotation;
+
+        if (retract == false)
+        {
+            startPosition = upPose.localPosition;
+            startRotation = upPose.localRotation;
+            endPosition = downPose.localPosition;
+            endRotation = downPose.localRotation;
+        }
+
+        float timeElapsed = 0;
+
+        while (timeElapsed < duration)
+        {
+            if (gearNode != null)
+            {
+                gearNode.transform.localPosition = Vector3.Lerp(startPosition, endPosition, timeElapsed / duration);
+                gearNode.transform.localRotation = Quaternion.Lerp(startRotation, endRotation, timeElapsed / duration);
+            }
+
+            timeElapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (gearNode != null)
+        {
+            gearNode.transform.localPosition = endPosition;
+            gearNode.transform.localRotation = endRotation;
+        }
+    }
+
+    //This snaps a gear node to its up or down marker pose.
+    public static void SnapToGearPose(GameObject gearNode, Transform upPose, Transform downPose, bool retract)
+    {
+        if (retract == true)
+        {
+            gearNode.transform.localPosition = upPose.localPosition;
+            gearNode.transform.localRotation = upPose.localRotation;
+        }
+        else
+        {
+            gearNode.transform.localPosition = downPose.localPosition;
+            gearNode.transform.localRotation = downPose.localRotation;
+        }
+    }
+
+    //This finds any landing gear that can be deployed on the craft.
+    //Convention (same pattern as wings): nodes named gear01..gearNN with
+    //markers gearXX_up / gearXX_down holding the two poses. Nodes may live at
+    //any depth (e.g. under the Model node), so this searches recursively.
+    public static void FindMovableGear(WingSystems wingSystem)
+    {
+        List<GameObject> nodes = new List<GameObject>();
+        List<GameObject> upMarkers = new List<GameObject>();
+        List<GameObject> downMarkers = new List<GameObject>();
+
+        for (int i = 1; i <= 12; i++)
+        {
+            string id = i.ToString("00");
+            Transform node = FindDeepChildCalled(wingSystem.transform, "gear" + id);
+
+            if (node == null)
+            {
+                continue;
+            }
+
+            Transform up = FindDeepChildCalled(wingSystem.transform, "gear" + id + "_up");
+            Transform down = FindDeepChildCalled(wingSystem.transform, "gear" + id + "_down");
+
+            if (up == null || down == null)
+            {
+                continue;
+            }
+
+            nodes.Add(node.gameObject);
+            upMarkers.Add(up.gameObject);
+            downMarkers.Add(down.gameObject);
+        }
+
+        wingSystem.gearNodes = nodes.ToArray();
+        wingSystem.gearUpMarkers = upMarkers.ToArray();
+        wingSystem.gearDownMarkers = downMarkers.ToArray();
+    }
+
+    //Recursive exact-name child search (FindChildTransformCalled only looks
+    //at direct children, but gear/wing nodes can sit under Model or holders).
+    private static Transform FindDeepChildCalled(Transform parent, string name)
+    {
+        foreach (Transform child in parent)
+        {
+            if (child.name == name)
+            {
+                return child;
+            }
+
+            Transform found = FindDeepChildCalled(child, name);
+
+            if (found != null)
+            {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    #endregion
+
     //This finds any wings that can be open and closed on the craft    
     public static void FindMovableWings(WingSystems wingSystem)
     {

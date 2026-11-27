@@ -41,6 +41,7 @@ public class SoftLanding : MonoBehaviour
     private bool previousDocking = false;
     private bool previousInvincible = false;
     private bool wingsClosedByLanding = false;
+    private bool gearDeployedByLanding = false;
     private float landingStartEnginePitch = 1f;
 
     // Foot mode freezes the landed state instead of disabling this component:
@@ -550,42 +551,65 @@ public class SoftLanding : MonoBehaviour
             return;
         }
 
-        if (WingSystemFunctions.HasMovableWings(ship.wingSystems) == false)
+        bool movableWings = WingSystemFunctions.HasMovableWings(ship.wingSystems);
+        bool movableGear = WingSystemFunctions.HasMovableGear(ship.wingSystems);
+
+        if (movableWings == false & movableGear == false)
         {
             return;
         }
 
-        wingsClosedByLanding = true;
-
-        if (ship.wingSystems.wingsOpen == true)
+        if (movableWings == true)
         {
-            WingSystemFunctions.CloseWings(ship.wingSystems);
+            wingsClosedByLanding = true;
+
+            if (ship.wingSystems.wingsOpen == true)
+            {
+                WingSystemFunctions.CloseWings(ship.wingSystems);
+            }
+        }
+
+        if (movableGear == true)
+        {
+            gearDeployedByLanding = true;
+
+            if (ship.wingSystems.gearDown == false)
+            {
+                WingSystemFunctions.DeployGear(ship.wingSystems);
+            }
         }
     }
 
     // Opens the S-foils again on takeoff / aborted landing.
     private void OpenSFoils()
     {
-        if (wingsClosedByLanding == false)
+        if (wingsClosedByLanding == false & gearDeployedByLanding == false)
         {
             return;
         }
 
         wingsClosedByLanding = false;
+        gearDeployedByLanding = false;
 
         if (ship == null || ship.wingSystems == null)
         {
             return;
         }
 
-        if (WingSystemFunctions.HasMovableWings(ship.wingSystems) == false)
+        if (WingSystemFunctions.HasMovableWings(ship.wingSystems) == true)
         {
-            return;
+            if (ship.wingSystems.wingsOpen == false)
+            {
+                WingSystemFunctions.OpenWings(ship.wingSystems);
+            }
         }
 
-        if (ship.wingSystems.wingsOpen == false)
+        if (WingSystemFunctions.HasMovableGear(ship.wingSystems) == true)
         {
-            WingSystemFunctions.OpenWings(ship.wingSystems);
+            if (ship.wingSystems.gearDown == true)
+            {
+                WingSystemFunctions.RetractGear(ship.wingSystems);
+            }
         }
     }
 
